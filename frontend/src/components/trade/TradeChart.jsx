@@ -553,8 +553,9 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       // Normalise line/page delta modes so every device zooms at one speed.
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1;
       const d = Math.max(-120, Math.min(120, e.deltaY * unit));
-      // 0.0009 ≈ 1.09× per notch with a 0.16 ease — a slow, feathered glide.
-      queueZoom(base * Math.exp(-d * 0.0009), e.clientX - rect.left, 0.16);
+      // 0.0005 ≈ 1.05× per notch with a 0.14 ease — deliberately gentle: a full
+      // wheel spin walks the zoom in small steps instead of leaping.
+      queueZoom(base * Math.exp(-d * 0.0005), e.clientX - rect.left, 0.14);
     };
     wrapEl?.addEventListener('wheel', onWheelZoom, { passive: false });
     // Pinch — tracked from raw pointer events so the zoom follows the fingers
