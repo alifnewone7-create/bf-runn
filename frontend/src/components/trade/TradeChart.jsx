@@ -380,13 +380,18 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       const range = chart.timeScale().getVisibleLogicalRange();
       const N = dataRef.current.length;
       if (!range || !N) return;
-      const maxBars = maxRightBarsRef.current?.() ?? Infinity;
-      const edge = Math.min(BASE_RIGHT_OFFSET, Math.max(1, maxBars - 1.5));
-      // Re-engage the live follow ONLY when the newest candle is still parked near
-      // the right edge. Panning left into history (offset goes negative) must never
-      // yank the view back to the live edge.
+      // Re-engage the live follow ONLY when the newest candle is still on screen.
+      // Panning left into history (offset goes negative) must never yank the view
+      // back to the live edge.
       const off = range.to - (N - 1);
-      followRef.current = off >= 0 && off <= edge + 2.5;
+      if (off >= -0.05) {
+        // Stay exactly where the user left the chart — the live edge logic below
+        // only steps in when the newest candle would leave the viewport, so a pan
+        // (very noticeable at maximum zoom-in) is never undone.
+        followRef.current = true;
+      } else {
+        followRef.current = false;
+      }
     };
     const wrapEl = wrapRef.current;
     // Let the user drag freely: pause the follow while the pointer is down, then
@@ -897,18 +902,22 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
           setBrowsingHistory(browsing);
         }
       }
-      // Live edge follow — the view stays FIXED while the current candle is
-      // forming (no continuous right-drift); it only shifts by one bar the moment
-      // a new candle opens, and only while the user is parked at the live edge.
+      // Live edge — the view NEVER auto-shifts to keep a gap in front of the
+      // running candle. When a candle closes and the next one opens it simply eats
+      // into whatever space is already on the right, so the chart stays visually
+      // still. The only exception: if the newest candle is about to be pushed off
+      // the right edge we nudge by the minimum needed to keep it in view.
       if (ts && readyRef.current && lc && followRef.current && dataRef.current.length) {
         const range = ts.getVisibleLogicalRange();
         if (range) {
           const maxBars = maxRightBarsRef.current?.() ?? Infinity;
-          const baseOff = Math.min(BASE_RIGHT_OFFSET, Math.max(1, maxBars - 1.5));
-          const want = Math.min(baseOff, Math.max(1, maxBars - 0.2));
+          // Never aim past the pan clamp, otherwise the follow and the clamp push
+          // in opposite directions every frame and the chart twitches.
+          const limit = Math.max(0, maxBars - 0.2);
+          const minGap = Math.min(0.6, limit);
           const cur = range.to - (dataRef.current.length - 1);
-          if (Math.abs(cur - want) > 0.05) {
-            try { ts.scrollToPosition(want, false); } catch (e) { /* noop */ }
+          if (minGap - cur > 0.02) {
+            try { ts.scrollToPosition(minGap, false); } catch (e) { /* noop */ }
           }
         }
       }
