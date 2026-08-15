@@ -303,7 +303,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.55)', fontSize: 11, attributionLogo: false },
       localization: { locale: 'en-US' },
       grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
-      timeScale: { timeVisible: true, secondsVisible: true, borderColor: 'rgba(255,255,255,0.08)', rightOffset: BASE_RIGHT_OFFSET, barSpacing: (wrapRef.current?.clientWidth || 900) < 700 ? 12 : 22, minBarSpacing: 3, maxBarSpacing: 58 },
+      timeScale: { timeVisible: true, secondsVisible: true, borderColor: 'rgba(255,255,255,0.08)', rightOffset: BASE_RIGHT_OFFSET, barSpacing: (wrapRef.current?.clientWidth || 900) < 700 ? 12 : 22, minBarSpacing: 2.4, maxBarSpacing: 64 },
       // autoScale stays ON so the price range is always fitted to the candles —
       // that keeps the chart vertically locked (no up/down drift). Vertical
       // "zoom" is done purely through scaleMargins (see the axis drag below).
@@ -313,7 +313,11 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       // frame so kinetic overshoot cannot escape it.
       kineticScroll: { touch: true, mouse: true },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
-      handleScale: { axisPressedMouseMove: { time: true, price: false }, mouseWheel: true, pinch: true },
+      // Native wheel-zoom / pinch-zoom are DISABLED on purpose: they step the
+      // bar spacing in coarse jumps and fight the live-follow + pan clamp loops.
+      // A single RAF-eased zoom controller (see "Smooth zoom" below) drives both
+      // desktop wheel and mobile pinch through one clamp-aware path instead.
+      handleScale: { axisPressedMouseMove: { time: true, price: false }, mouseWheel: false, pinch: false },
       crosshair: {
         // Always Hidden (2) — the canvas crosshair only repainted with the chart's
         // own render pass, so it trailed the pointer. A DOM crosshair (see the
@@ -371,6 +375,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
     const onRange = (range) => {
       if (!range || !readyRef.current) return;
       if (!loadingOlderRef.current && hasMoreRef.current && range.from < 15) loadOlderRef.current();
+      if (zoomingRef.current) return; // applyZoom already clamps — don't double-write
       clampToLimit(range);
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
@@ -447,6 +452,153 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
     window.addEventListener('pointermove', onAxisMove);
     window.addEventListener('pointerup', onAxisUp);
     window.addEventListener('pointercancel', onAxisUp);
+    // ── Smooth zoom — wheel (desktop) + pinch (mobile) ───────────────────────
+    // The library's own zoom multiplies barSpacing per input event, which reads
+    // as a stutter. Here every gesture only moves a TARGET bar-spacing; a single
+    // requestAnimationFrame loop eases the real range toward it, so zooming is
+    // continuous at display refresh rate. The range is written through
+    // setVisibleLogicalRange (sub-pixel accurate) and the pan clamp + live-edge
+    // follow are honoured inside the same write, so nothing fights back.
+    // Our own zoom stops (3…58) sit INSIDE the library's own min/max bar spacing
+    // (2.4…64) on purpose: if a requested span ever crossed the library limit it
+    // would silently re-anchor the range, which is what made the chart jump/glitch
+    // when the user kept zooming in at the maximum level.
+    const ZOOM_MIN_BS = 3;
+    const ZOOM_MAX_BS = 58;
+    const clampBS = (v) => Math.min(ZOOM_MAX_BS, Math.max(ZOOM_MIN_BS, v));
+    // Real bar spacing derived from the live range (px per bar).
+    const currentBarSpacing = () => {
+      const ts = chart.timeScale();
+      const r = ts.getVisibleLogicalRange();
+      const w = ts.width() || 0;
+      const fallback = ts.options()?.barSpacing || 22;
+      if (!r || w <= 0) return fallback;
+      const visible = r.to - r.from;
+      return visible > 0 ? w / visible : fallback;
+    };
+    // Write a new zoom level. anchorX keeps the bar under the cursor/pinch centre
+    // pinned; at the live edge the newest candle keeps its parked offset instead
+    // so the follow loop and the zoom agree on the same target.
+    const applyZoom = (bs, anchorX) => {
+      const ts = chart.timeScale();
+      const w = ts.width() || 0;
+      const r = ts.getVisibleLogicalRange();
+      if (!r || w <= 0) return;
+      const visible = r.to - r.from;
+      if (visible <= 0) return;
+      const nextVisible = w / clampBS(bs);
+      const N = dataRef.current.length;
+      const wrapperW = hostSizeRef.current.w || w;
+      const maxRightBars = (Math.max(0, w - wrapperW / 2) / w) * nextVisible;
+      let from;
+      let to;
+      if (followRef.current && N) {
+        const want = Math.min(BASE_RIGHT_OFFSET, Math.max(0, maxRightBars - 0.2));
+        to = (N - 1) + want;
+        from = to - nextVisible;
+      } else {
+        const ax = Math.max(0, Math.min(anchorX ?? w, w));
+        const ratio = w > 0 ? ax / w : 1;
+        const logicalAt = r.from + ratio * visible;
+        from = logicalAt - ratio * nextVisible;
+        to = from + nextVisible;
+        if (N) {
+          const excess = (to - (N - 1)) - maxRightBars;
+          if (excess > 0) { from -= excess; to -= excess; }
+        }
+      }
+      try { ts.setVisibleLogicalRange({ from, to }); } catch (err) { /* noop */ }
+    };
+    const zoomState = { bs: null, x: null, ease: 0.24, raf: 0 };
+    const zoomLoop = () => {
+      zoomState.raf = 0;
+      if (zoomState.bs == null || !chartRef.current) return;
+      const cur = currentBarSpacing();
+      const target = zoomState.bs;
+      if (Math.abs(target - cur) < 0.04) {
+        applyZoom(target, zoomState.x);
+        zoomState.bs = null;
+        zoomingRef.current = 0;
+        return;
+      }
+      applyZoom(cur + (target - cur) * zoomState.ease, zoomState.x);
+      zoomState.raf = requestAnimationFrame(zoomLoop);
+    };
+    const queueZoom = (bs, x, ease) => {
+      const target = clampBS(bs);
+      const cur = currentBarSpacing();
+      // Already sitting on a stop and being pushed further into it → do nothing at
+      // all. Writing the range here is what produced the glitch/jump when the user
+      // kept scrolling in after the maximum zoom was reached.
+      const pinnedIn = target >= ZOOM_MAX_BS - 0.001 && cur >= ZOOM_MAX_BS - 0.4;
+      const pinnedOut = target <= ZOOM_MIN_BS + 0.001 && cur <= ZOOM_MIN_BS + 0.06;
+      if (pinnedIn || pinnedOut) {
+        zoomState.bs = null;
+        zoomingRef.current = 0;
+        return;
+      }
+      zoomState.bs = target;
+      zoomState.x = x;
+      zoomState.ease = ease;
+      zoomingRef.current = performance.now();
+      if (!zoomState.raf) zoomState.raf = requestAnimationFrame(zoomLoop);
+    };
+    const onWheelZoom = (e) => {
+      if (!readyRef.current || !wrapEl) return;
+      // Horizontal wheel / trackpad swipe stays a pan (handled by the library).
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      e.preventDefault();
+      const rect = wrapEl.getBoundingClientRect();
+      const base = zoomState.bs != null ? zoomState.bs : currentBarSpacing();
+      // Normalise line/page delta modes so every device zooms at one speed.
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1;
+      const d = Math.max(-120, Math.min(120, e.deltaY * unit));
+      // 0.0015 ≈ 1.16× per notch — a calm, gliding step (not a lurch).
+      queueZoom(base * Math.exp(-d * 0.0015), e.clientX - rect.left, 0.2);
+    };
+    wrapEl?.addEventListener('wheel', onWheelZoom, { passive: false });
+    // Pinch — tracked from raw pointer events so the zoom follows the fingers
+    // frame-by-frame (the eased loop keeps finger jitter out of the picture).
+    const touches = new Map();
+    let pinch = null;
+    const pinchPair = () => {
+      const [a, b] = Array.from(touches.values());
+      return a && b ? { a, b } : null;
+    };
+    const onTouchDown = (e) => {
+      if (e.pointerType !== 'touch') return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const pair = pinchPair();
+      if (touches.size === 2 && pair && wrapEl) {
+        const rect = wrapEl.getBoundingClientRect();
+        pinch = {
+          d: Math.hypot(pair.a.x - pair.b.x, pair.a.y - pair.b.y),
+          bs: currentBarSpacing(),
+          x: (pair.a.x + pair.b.x) / 2 - rect.left,
+        };
+      }
+    };
+    const onTouchMove = (e) => {
+      if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!pinch || touches.size < 2) return;
+      const pair = pinchPair();
+      if (!pair) return;
+      const d = Math.hypot(pair.a.x - pair.b.x, pair.a.y - pair.b.y);
+      if (!pinch.d || !d) return;
+      if (e.cancelable) e.preventDefault();
+      queueZoom(pinch.bs * (d / pinch.d), pinch.x, 0.45);
+    };
+    const onTouchUp = (e) => {
+      if (e.pointerType !== 'touch') return;
+      touches.delete(e.pointerId);
+      if (touches.size < 2) pinch = null;
+    };
+    wrapEl?.addEventListener('pointerdown', onTouchDown);
+    wrapEl?.addEventListener('pointermove', onTouchMove, { passive: false });
+    wrapEl?.addEventListener('pointerup', onTouchUp);
+    wrapEl?.addEventListener('pointercancel', onTouchUp);
+    wrapEl?.addEventListener('pointerleave', onTouchUp);
     // While a drag/fling pushes past the limit, the series keeps painting at the
     // clamped position but timeScale coordinates still report the over-panned
     // range for a frame — overlays that convert time→pixel would draw shifted
@@ -478,7 +630,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
     // frame-by-frame; kinetic scroll stays ON so scrolling still feels smooth.
     let clampRaf = 0;
     const clampLoop = () => {
-      if (chartRef.current) {
+      if (chartRef.current && !zoomingRef.current) {
         const range = chartRef.current.timeScale().getVisibleLogicalRange();
         clampToLimit(range);
       }
@@ -488,7 +640,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
     const t = setInterval(() => {
       setLocalClock(new Date().toLocaleTimeString('en-GB'));
     }, 1000);
-    return () => { ro.disconnect(); cancelAnimationFrame(clampRaf); clearInterval(t); panExcessPxRef.current = null; wrapEl?.removeEventListener('pointerup', onUserEnd); wrapEl?.removeEventListener('pointerdown', onUserStart); wrapEl?.removeEventListener('pointercancel', onUserEnd); wrapEl?.removeEventListener('wheel', onUserEnd); wrapEl?.removeEventListener('pointerdown', onAxisDown); wrapEl?.removeEventListener('pointermove', onAxisHover); wrapEl?.removeEventListener('pointerleave', clearAxisCursor); clearAxisCursor(); window.removeEventListener('pointermove', onAxisMove); window.removeEventListener('pointerup', onAxisUp); window.removeEventListener('pointercancel', onAxisUp); chart.remove(); chartRef.current = null; seriesRef.current = null; };
+    return () => { ro.disconnect(); cancelAnimationFrame(clampRaf); if (zoomState.raf) cancelAnimationFrame(zoomState.raf); zoomingRef.current = 0; clearInterval(t); panExcessPxRef.current = null; wrapEl?.removeEventListener('wheel', onWheelZoom); wrapEl?.removeEventListener('pointerdown', onTouchDown); wrapEl?.removeEventListener('pointermove', onTouchMove); wrapEl?.removeEventListener('pointerup', onTouchUp); wrapEl?.removeEventListener('pointercancel', onTouchUp); wrapEl?.removeEventListener('pointerleave', onTouchUp); wrapEl?.removeEventListener('pointerup', onUserEnd); wrapEl?.removeEventListener('pointerdown', onUserStart); wrapEl?.removeEventListener('pointercancel', onUserEnd); wrapEl?.removeEventListener('wheel', onUserEnd); wrapEl?.removeEventListener('pointerdown', onAxisDown); wrapEl?.removeEventListener('pointermove', onAxisHover); wrapEl?.removeEventListener('pointerleave', clearAxisCursor); clearAxisCursor(); window.removeEventListener('pointermove', onAxisMove); window.removeEventListener('pointerup', onAxisUp); window.removeEventListener('pointercancel', onAxisUp); chart.remove(); chartRef.current = null; seriesRef.current = null; };
   }, []);
 
   // ── DOM crosshair ─────────────────────────────────────────────────────────
@@ -712,6 +864,9 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
   // Server clock anchor (from the tick stream) + live-edge follow state.
   const serverClockRef = useRef(null);
   const followRef = useRef(true);
+  // Timestamp of the last zoom frame — the live-follow and clamp loops step aside
+  // while a zoom gesture is easing so only one writer touches the range.
+  const zoomingRef = useRef(0);
   const browsingRef = useRef(false);
   const [browsingHistory, setBrowsingHistory] = useState(false);
   const jumpToLive = () => {
@@ -900,12 +1055,13 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       // Live edge follow — the view stays FIXED while the current candle is
       // forming (no continuous right-drift); it only shifts by one bar the moment
       // a new candle opens, and only while the user is parked at the live edge.
-      if (ts && readyRef.current && lc && followRef.current && dataRef.current.length) {
+      if (ts && readyRef.current && lc && followRef.current && dataRef.current.length && !zoomingRef.current) {
         const range = ts.getVisibleLogicalRange();
         if (range) {
           const maxBars = maxRightBarsRef.current?.() ?? Infinity;
-          const baseOff = Math.min(BASE_RIGHT_OFFSET, Math.max(1, maxBars - 1.5));
-          const want = Math.min(baseOff, Math.max(1, maxBars - 0.2));
+          // Same formula the zoom controller uses, so the two writers can never
+          // disagree by a fraction of a bar and ping-pong the view.
+          const want = Math.min(BASE_RIGHT_OFFSET, Math.max(0, maxBars - 0.2));
           const cur = range.to - (dataRef.current.length - 1);
           if (Math.abs(cur - want) > 0.05) {
             try { ts.scrollToPosition(want, false); } catch (e) { /* noop */ }
