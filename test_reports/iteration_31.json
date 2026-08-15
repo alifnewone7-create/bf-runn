@@ -1,0 +1,53 @@
+{
+  "summary": "Frontend-only run focused on REAL server-side persistence of chart drawings (backend now live on the VPS). Found and root-caused a CRITICAL integration bug: NOTHING was ever saved to the server - useDrawings.emit() always passed the optional ack argument, so socket.io serialised it as a trailing null and the frames went out as 42[\"drawings/save\",{...},null]. The server handler (sid, data) silently drops any event carrying 2 data args, so drawings/save, drawings/delete and drawings/clear were no-ops while drawings/get (which passes a real ack) worked - i.e. the app could LOAD server drawings but never write any. Proven with a python socket.io client (same payload with trailing null -> not persisted; without -> persisted) and with captured browser websocket frames. Applied the minimal 1-line emit fix (in Fix Scope: standard coding bug, no behaviour change) and then re-ran the whole matrix: server per-account/per-pair persistence after localStorage.clear() + re-login, delete/clear propagation, style + hide persistence, move/endpoint-resize persistence, live cross-session sync in two browser contexts, mobile 414x860 flow, hide-all incl. draft, mode-exit pass-through and regressions (asset tabs, 1m->5m, $1 UP trade). Everything passes after the fix. All test drawings cleared from the server at the end (EURUSD/GBPUSD/USDJPY/EURAUD all 0).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "socket.io drawings/save", "issue": "Server regenerates the id when the client id is not a valid UUID (sent id 'probe-...' came back as a fresh uuid). Combined with the frontend fallback id format `d-<ts>-<rand>` (used when crypto.randomUUID is unavailable, e.g. non-secure context / older mobile browsers) the client and server ids diverge -> every subsequent save creates a NEW row and delete/update never matches. Either honour the client id or return it and have the client adopt the server id."},
+      {"endpoint": "socket.io drawings/get", "issue": "Unknown/empty symbol ('BOGUS_XX', '') is accepted and answered with an empty list instead of an error ack; no symbol validation."},
+      {"endpoint": "socket.io drawings/get", "issue": "FLAKY: 1 call out of ~20 never acked (10s timeout) for EURAUD_OTC and succeeded on retry (~5% failure rate). Frontend has no ack timeout, so such a miss leaves the chart on the stale local mirror with no user feedback."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "render.js fib labels", "issue": "Fib level labels are drawn at the shape's right edge (fix from iteration_30 verified OK while the shape is on screen), but once the shape scrolls toward the left edge (seen after 1m->5m switch) the labels are clipped by the chart's left edge / behind the desktop vertical tool rail. Cosmetic.", "selector": "drawing-canvas", "priority": "LOW"},
+      {"component": "TradeChart mobile clock", "issue": "data-testid=\"chart-clock\" is only on the desktop-only element (hidden md:block) so it measures 0x0 on mobile; the visible mobile clock uses data-testid=\"mobile-clock\". Not a defect, but the two names should be documented/aligned for tests.", "selector": "chart-clock / mobile-clock", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Drawing persistence over socket.io (drawings/save|delete|clear)", "issue": "FIXED BY TESTER (1 line): useDrawings.emit() passed an undefined ack as the 3rd emit arg, producing 42[\"drawings/save\",{...},null]; the server handler drops events with an extra data arg, so no drawing/style/move/delete/clear ever reached the server. Verified before/after with raw WS frames + a python socket.io client. Please review and keep the guard.", "affected_selectors": ["drawing-canvas", "drawings-clear-all", "draw-delete-selected"]},
+      {"flow": "Offline / reconnect handling", "issue": "STILL OPEN: emit() returns false when the socket is not connected and create/update/remove/clear ignore that return value, so any drawing action taken while the socket is reconnecting (the console repeatedly logs 'WebSocket is closed before the connection is established') is silently lost server-side while still showing locally. Needs an outbox/retry or an ack timeout + 'not synced' indicator.", "affected_selectors": ["drawing-canvas"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/sio_drawings_probe.py",
+    "/app/tests/sio_drawings_inspect.py",
+    "/app/tests/sio_drawings_argcount.py"
+  ],
+  "action_items": [
+    "Review/keep the useDrawings.emit() fix (do not pass an undefined ack to socket.emit) - without it server persistence is completely broken.",
+    "Add an outbox/retry (or ack + timeout) for drawings/save|delete|clear so actions taken while the socket is down are not silently lost.",
+    "Replace the non-UUID genId() fallback with a real uuid-v4 generator (or adopt the id the server returns in the save ack) so ids never diverge from the server row.",
+    "Backend: validate the symbol in drawings/* and return an error ack for unknown symbols; investigate the occasional missing ack on drawings/get.",
+    "Cosmetic: keep fib labels inside the visible plot area (clamp x) so they are not clipped by the chart edge / desktop tool rail."
+  ],
+  "critical_code_review_comments": [
+    "useDrawings.js: `ws.emit(event, payload, ack)` with ack === undefined is serialised by socket.io-client as a trailing null data arg - always branch on ack (fixed). This class of bug is invisible because fire-and-forget emits are never checked.",
+    "useDrawings.js: create/update/remove/clear ignore emit()'s false return value -> silent server-side data loss while the socket is reconnecting.",
+    "useDrawings.js: genId() fallback `d-<ts>-<rand>` is not a UUID and the backend replaces it, breaking client/server id identity for update+delete.",
+    "TradeChart.jsx is 1037 lines (>700 guideline); the drawing wiring should move into a useChartDrawingUI hook."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/trade/drawing/useDrawings.js",
+    "/app/tests/sio_drawings_probe.py",
+    "/app/tests/sio_drawings_inspect.py",
+    "/app/tests/sio_drawings_argcount.py"
+  ],
+  "success_rate": {"backend": "not in scope (VPS) - drawings/* handlers verified working via socket.io probe", "frontend": "100% after the emit fix (9/9 requested areas pass); 0% of server writes worked before it"},
+  "seed_data_creation": "Throwaway drawings on EURUSD_OTC / GBPUSD_OTC / USDJPY_OTC created and removed; drawings/clear run on EURUSD_OTC, GBPUSD_OTC, USDJPY_OTC, EURAUD_OTC at the end (all verified 0 server-side). One $1 UP demo trade placed as a regression check (balance 151.19 -> 150.19).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "nepoca@hamham.uk / 12345678 (from /app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "Verified AFTER the emit fix: (1) server persistence - 2 shapes on EURUSD_OTC survive localStorage.clear() + re-login with identical ids/points; (2) per-pair isolation on the server (EUR 2 / GBP 1, verified again after LS clear); (3) delete (draw-object-del-<id>) and drawings-clear-all propagate to the server (deleted shape never returns); (4) colour #f43f5e + width 4 + dotted + visible:false all persist server-side, hidden shape still listed with eye-off; (5) endpoint drag (resize) and body drag (move) change points and persist server-side; (6) live cross-session sync between two browser contexts on the same account: create, restyle, delete and clear-all all appear in tab B within ~2s with no reload; (7) mobile 414x860: mobile-chart-tools -> rail-drawing -> drawings-panel-mobile with a 2-column grid (13 tools, 2 distinct x offsets), 1 tap = horizontal_line, 2 taps = trend_line, style bar docked at y=507 in a 52..664 canvas, no overlap with mobile-clock or drawing-mode-chip, drawings persist after LS clear + relogin; (8) hide-all now hides the in-progress draft too (canvas painted pixels 9299 -> 0 -> 9299); (9) drawing-mode-exit sets canvas pointerEvents to none. Testing tricks: use page.on('websocket') + framesent/framereceived (payload arrives as a plain str in this Playwright build) to see the socket.io frames; /app/tests/sio_drawings_*.py talk to the VPS socket directly (login REST returns the JWT under key 'token'); read localStorage key bfg_drawings_v1:<accountId> to assert state; count non-transparent pixels on [data-testid=drawing-canvas] for visibility. Gotchas: picking a tool closes the drawings panel (reopen via desk-rail-drawing); drawings-edit-toggle toggles edit OFF if already in edit; the chart auto-scrolls a few px/second so compute drag coordinates from the canvas pixel bbox instead of hardcoding.",
+  "rca_of_the_issue": "socket.io-client emits every argument it is given; useDrawings.emit() called ws.emit(event, payload, ack) even when ack was undefined, which is encoded on the wire as a trailing null data argument (captured frame: 42[\"drawings/save\",{...},null]). python-socketio dispatches handlers with the received data args, so a handler declared as (sid, data) raises/rejects when two data args arrive and the event is dropped without any ack or error - the client never noticed because save/delete/clear are fire-and-forget. drawings/get was unaffected because its real callback is encoded as an ack id in the packet header rather than as an extra data arg. Reproduced deterministically with a python client: sio.emit('drawings/save', (payload, None)) -> row absent; sio.emit('drawings/save', payload) -> row present. Fix: only pass ack to ws.emit when it is defined."
+}

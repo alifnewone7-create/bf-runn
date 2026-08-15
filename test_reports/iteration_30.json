@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only E2E testing of the new chart drawing tools on /demo-trade (backend on user's VPS, drawings/* socket handlers not deployed, so localStorage mirror path was exercised). Logged in with the trader test account, verified desktop left rail -> Drawings panel with all 13 tools, creation for 1/2/3/4-point tools, style editing (colour/width/style), move + endpoint resize, hide/show (style bar, object-list eye, hide-all), delete (selected, list item, clear-all), per-pair persistence across pair switch and full page reload, glue to chart through pan/zoom and 1m->5m timeframe change, select-mode pan on empty space, idle-mode pointer pass-through, and the mobile bottom-sheet flow at 414x860. Also re-checked regressions: asset tabs, timeframe panel, chart type panel, UP trade placement. Everything in the feature list works; only 4 minor cosmetic/robustness issues found, no blockers.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DrawingLayer (draft rendering)", "issue": "A half-finished shape (draft) keeps rendering while 'hide all' is ON. With hideAll enabled and a 2-of-3-point triangle in progress the canvas still had ~658 painted pixels (saved drawings correctly dropped from 123k px to 0). Draft render should also respect hideAll.", "selector": "drawing-canvas / drawings-toggle-all", "priority": "LOW"},
+      {"component": "DrawingLayer (draft lifecycle)", "issue": "A half-placed multi-point shape stays on screen indefinitely and is only discarded on tool/mode change or Escape; there is no visual hint (e.g. 'click 1 more point' / cancel affordance), so users can be left with a dangling dashed shape.", "selector": "drawing-mode-chip", "priority": "LOW"},
+      {"component": "DrawingStyleBar (mobile 414x860)", "issue": "The floating style bar is absolutely positioned top-center and covers the chart local-time clock (data-testid=chart-clock shows only '08:' behind it) and sits flush against the 'Select / edit' chip. Consider offsetting it or docking it to the bottom on mobile.", "selector": "drawing-style-bar", "priority": "LOW"},
+      {"component": "render.js fib labels", "issue": "Fibonacci level labels are drawn at the left edge of the shape; when the shape starts near the left of the chart the labels are overlapped/clipped by the desktop vertical tool rail (screenshot at 5m: '100.0% 1.11091' partially hidden behind rail).", "selector": "drawing-canvas", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile drawings bottom sheet (414x860)", "issues": ["Sheet takes 585px of an 860px viewport (68vh) and scrolls correctly (scrollHeight 682 vs client 584) - layout intact, but with 13 tools + objects list the user must scroll for every pick; a 2-column tool grid would fit better on mobile."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Gate the in-progress draft rendering behind hideAll in DrawingLayer render loop.",
+    "Add a cancel/hint affordance for half-finished multi-point drawings (chip could show 'need N more points' + tap to cancel).",
+    "Move/offset the mobile DrawingStyleBar so it does not cover the chart clock and mode chip.",
+    "Namespace the localStorage mirror key (bfg_drawings_v1) per account id - currently a second account logging in on the same browser sees the previous account's drawings until/unless the server list arrives, and forever if drawings/* is not deployed.",
+    "Deploy the backend drawings/* socket.io handlers on the VPS so real per-account server persistence and cross-device drawings/changed sync can be verified (not testable here)."
+  ],
+  "critical_code_review_comments": [
+    "useDrawings.js: localStorage key is global ('bfg_drawings_v1' -> symbol -> list) with no account scoping; on shared browsers drawings leak across accounts while the socket ack is pending or unavailable.",
+    "useDrawings.js emit() returns true whenever the socket is connected, so if the server has no drawings/get handler the ack never fires and the retry loop never triggers - silent stale-cache mode. Consider an ack timeout to surface 'not synced' state to the user.",
+    "DrawingLayer.jsx runs an unconditional requestAnimationFrame loop that clears + repaints the canvas every frame even with zero drawings; consider bailing out early when list is empty and no draft to save mobile battery.",
+    "TradeChart.jsx is 1035 lines - past the 700-line guideline; the drawing wiring could be extracted into a useChartDrawingUI hook."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "not tested (runs on user's VPS)", "frontend": "100% of listed feature cases passed (13/13 areas), 4 minor cosmetic issues" },
+  "seed_data_creation": "Created and then cleared throwaway drawings on EURUSD_OTC via the UI (clear-all run at the end of each test; localStorage bfg_drawings_v1 reset before each scenario). Placed one $1 UP demo trade on EUR/USD as a regression check.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "nepoca@hamham.uk / 12345678 (from /app/memory/test_credentials.md) - login works, lands on /demo-trade",
+  "context_for_next_testing_agent": "Verified facts: desk-rail-drawing opens drawings-panel-desktop with all 13 draw-tool-* entries. 1-point tools (horizontal/vertical/cross) create on a single click; 2-point tools (trend_line, ray, extended_line, rectangle, fib_retracement, price_range, date_range) create on click-drag; triangle and parallel_channel need 3 points (drag = 2 pts + 1 extra click), disjoint_channel needs 4 (drag + 2 clicks). Style bar edits persist into state (verified via localStorage bfg_drawings_v1). Endpoint drag changes one point; body drag shifts both. hide/show + delete + clear-all all verified. Per-pair persistence verified: 2 shapes on EURUSD_OTC, GBP/USD shows 0, back to EUR/USD shows 2, after reload still 2. Drawings stay glued through pan, wheel zoom and 1m->5m tf change. Canvas pointerEvents = 'none' when mode is idle (desktop and mobile) and the chart pans normally in select/edit mode when dragging empty space (measured drawing centroid shift 550 -> 450 px). Mobile: mobile-chart-tools -> rail-drawing opens drawings-panel-mobile, tap-to-place works for 1-tap and 2-tap tools. Useful trick: read window localStorage 'bfg_drawings_v1' to assert drawing state, and count non-transparent pixels of [data-testid='drawing-canvas'] to assert visibility.",
+  "rca_of_the_issue": "Draft-visible-with-hideAll: in DrawingLayer.jsx the render loop wraps saved drawings in `if (!hide) { ... }` but the draft block that follows is unconditional, so an in-progress shape paints even when hide-all is on. Reproduce: pick Triangle, drag two points (do not click the third), open the panel and press drawings-toggle-all -> canvas still shows the dashed draft."
+}

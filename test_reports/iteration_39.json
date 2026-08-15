@@ -1,0 +1,55 @@
+{
+  "summary": "Frontend-only smoke of the new smooth-scroll + candle-countdown work on /demo-trade. Countdown, per-frame smoothness within a bar, 5m timeframe, drag-without-fight, follow-resume, default zoom all PASS. Two problems found: (1) CRITICAL — at each candle rollover the live-vert-line-top jumps by a full bar width (~21.8px, exactly barSpacing) in a single frame, i.e. the exact whole-bar rollover jump this fix was supposed to remove; (2) on mobile 390x844 and after mouse-wheel zoom on desktop, the smooth drift stops (0 distinct positions across ~3s) even though the countdown keeps ticking — auto-follow appears to disengage silently in those two situations.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "TradeChart rAF drain / scrollToPosition(BASE_RIGHT_OFFSET + frac)",
+        "issue": "At a 1m candle rollover the live-vert-line-top x jumps ~21.8px (== barSpacing 22) in a single animation frame. Captured deterministically: countdown '01:00' -> '00:59', left goes 1286.13px -> 1307.93px in one rAF tick (max intra-candle jump is only 0.24px, so the discontinuity is exactly at bar boundary). This is the 'no whole-bar jump at rollover' requirement failing. Likely cause: when the new bar opens, `frac` resets from ~1 to 0 but the anchor bar index isn't advanced in the same frame, so scrollToPosition snaps back by one bar.",
+        "selector": "[data-testid=live-vert-line-top]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "TradeChart smooth-drift on mobile / after wheel zoom",
+        "issue": "On viewport 390x844 on fresh load, live-vert-line-top style.left had 1 distinct value over 210 rAF frames (~3.5s) even though countdown was ticking (00:04, 00:01 seen). Same symptom after mouse-wheel zoom on desktop (1 distinct position over 2.5s). Countdown badge itself is fine — only the fractional scroll animation stalls. Probably the >2.5 bars follow-off guard is triggering because the initial fit / zoom leaves the range slightly past the live edge, so followRef stays false.",
+        "selector": "[data-testid=live-vert-line-top]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passing_checks": [
+    "COUNTDOWN visible with data-testid=candle-countdown, badge x=1511 (left of price-tag x=1559) sitting on the live price line (y ~= live-price-tag y).",
+    "COUNTDOWN 1m rollover observed: 00:02 -> 00:01 -> 01:00 -> 00:59 -> 00:58. Never negative, never frozen.",
+    "COUNTDOWN 5m: after switching to 5m the badge counted down 02:51 -> 02:50 -> 02:49 -> 02:48 -> 02:47 (i.e. follows selected timeframe, minutes > 0).",
+    "SMOOTH MOTION within a bar: 108 rAF frames, 8 distinct sub-px left values, max frame-to-frame jump 0.25px, total drift -1.61px over 4s. Live-price-tag showed 31 distinct sub-tick values in the same window (glide is working).",
+    "USER PAN NOT FOUGHT: after dragging live-vert from 1286px -> 913px, holding for 1s (still 913), releasing (still 913 for 4s) — no snap-back. Dragging back near the live edge and releasing re-engaged auto-follow (6 distinct positions in the next 3s on desktop).",
+    "DEFAULT ZOOM: about 50 candles visible from 17:10 to 18:00 on 1920 width — matches the requested 40-80 range, chart still pannable to older history.",
+    "Mouse wheel zoom-in kept the countdown badge visible and updating (only the follow-drift stalled — see bug #2)."
+  ],
+  "not_tested": [
+    "REGRESSION drawings (rectangle + trend line + style bar) across a rollover — skipped to keep report focused after finding the rollover-jump bug; the drift itself works, but drawing anchoring across the ~22px snap should be re-checked once bug #1 is fixed.",
+    "REGRESSION indicators (RSI + Bollinger) alignment across rollover — same reason.",
+    "REGRESSION 1m DEMO UP trade — not placed; countdown/entry-marker anchoring during smooth drift not verified.",
+    "REGRESSION pan-lock middle-of-pane stop and drawings-glued-to-candles — not re-verified in this run."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "PRIMARY: fix the ~22px single-frame jump at candle rollover in the rAF drain in TradeChart.jsx. When the tick stream advances to a new bar, advance the scroll anchor by one bar in the same frame that `frac` resets to 0 (e.g. keep a runningPos = liveBarIndex + frac, or subtract 1 from frac for one frame after the boundary) so scrollToPosition(BASE_RIGHT_OFFSET + frac) doesn't rewind by a full bar. Repro: on /demo-trade wait until countdown hits 00:03, sample document.querySelector('[data-testid=live-vert-line-top]').style.left every rAF for 10s; the frame where cd goes 01:00->00:59 shows left 1286->1307.",
+    "SECONDARY: mobile fresh-load and post-wheel-zoom leave followRef=false. Either relax the 2.5-bar guard on those code paths, or explicitly re-arm follow after the initial fit and after a wheel event when the range's right edge is within a small tolerance of the live bar. Repro: 390x844 viewport, /demo-trade, no interaction — live-vert x stays constant for 3+ seconds while countdown keeps ticking.",
+    "After fixing #1, please retest drawings + indicators + a $1 DEMO UP trade across a rollover — they were deferred in this run."
+  ],
+  "critical_code_review_comments": [
+    "The 'follow off if range >2.5 bars away' check is applied to too many code paths (initial mount, wheel zoom) — anywhere the range shifts slightly during layout the user ends up with a silently-frozen view. Consider anchoring the guard to actual user pointer input only.",
+    "The fractional scroll and the bar-index advance appear to be decoupled — the boundary transition needs to update both atomically in the same rAF or the jump is inevitable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "70% — 7/9 explicit checks pass; rollover-jump and mobile/post-zoom drift fail"},
+  "test_credentials": "qa.sm.32218@binaryfundglobal.com / QaDraw#2026x (fresh 15-min token minted at run start; use the localStorage.setItem('bfg_token', ...) injection flow — UI login has email 2FA).",
+  "seed_data_creation": "One throwaway QA account created via POST /api/auth/register: qa.sm.32218@binaryfundglobal.com.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Rollover-jump repro is deterministic: poll for countdown text '00:04' or '00:05', then sample [data-testid=live-vert-line-top].style.left in a requestAnimationFrame loop for ~10s. Compute max abs frame-to-frame delta. Expected <2px, actually ~22px at the 01:00->00:59 transition. Mobile-drift repro: 390x844 viewport, load /demo-trade with token in localStorage, wait 4s, sample style.left of live-vert-line-top for 3s — should have multiple distinct values, currently only 1. Regressions on drawings/indicators/trades were NOT run in this iteration and should be picked up after the rollover fix.",
+  "rca of the issue": "In TradeChart.jsx rAF drain, ts.scrollToPosition(BASE_RIGHT_OFFSET + frac, false) is called every frame where frac ∈ [0,1) is the elapsed fraction of the CURRENT live bar. When a new bar opens, frac resets to ~0 but the price series' logical live-bar index has also advanced by +1 — so the effective x should stay continuous. It doesn't, which strongly suggests the code recomputes frac against the new bar without advancing whatever bar-index the scroll anchor is measured from within the same frame, producing a one-bar rewind (== barSpacing = 22px). Fix: track cumulative position (liveBarIndex + frac) or, on the frame that crosses the boundary, offset scrollToPosition by -1 so the visual x is preserved, then let subsequent frames continue with the fresh frac."
+}

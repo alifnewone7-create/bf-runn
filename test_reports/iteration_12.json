@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only Playwright testing of /reset-password link-status screens (used, expired, invalid, valid), no-token invalid path, graceful fallback when status endpoint 404s on the VPS, plus regressions on /forgot-password, trader login, and admin portal load. All acceptance criteria met on both desktop (1920x800) and mobile (390x844). No blocking issues found.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "detailed_results": {
+    "status_used": "OK — data-testid=reset-link-used renders, heading 'Link already used', English copy about link already used, Back to Sign In button (reset-go-signin) navigates to /login. 'Request a new link' correctly hidden for 'used' state (per spec).",
+    "status_expired": "OK — data-testid=reset-link-expired, heading 'Link expired', English copy mentioning 30 minutes, reset-go-signin -> /login, reset-request-new -> /forgot-password.",
+    "status_invalid_with_token": "OK — data-testid=reset-link-invalid, heading 'Link not valid', reset-go-signin visible, reset-request-new visible.",
+    "invalid_no_token": "OK — /reset-password (no token query) renders reset-link-invalid immediately with ZERO calls to /api/auth/reset-password/status.",
+    "status_valid": "OK — data-testid=reset-password-form shown with both password fields, both -toggle eye buttons flip type password<->text, reset-submit, and reset-back-signin link (small link variant, per design). Validation: <8 chars -> 'Password must be at least 8 characters long.'; mismatch -> 'Both passwords must match.' — both surfaced in data-testid=reset-error.",
+    "graceful_fallback": "OK — With NO route interception (real VPS returns 404 for /api/auth/reset-password/status), page falls through to the normal form (linkState defaults to 'valid' on catch). Submitting a valid matching password produced backend error 'Invalid or expired token' rendered in data-testid=reset-error; no crash, no hang.",
+    "design_constraints_reset_password": "OK on both 1920x800 and 390x844 for used/expired/invalid/valid: no Login/Registration tabs, no 'Pass the challenge' brand panel, no '256 bit SSL' text, logo top-left visible (reset-logo-link), single centered card, no horizontal overflow.",
+    "regression_forgot_password": "Loads fine; note: /forgot-password page contains the string 'Pass the challenge' (marketing panel — this page still has its brand panel). Design constraint of removing the panel was scoped to /reset-password per the request, so not flagged as a bug, just noted.",
+    "regression_trader_login": "qa.crosshair@bfgtest.com / TestPass123! logged in successfully, redirected to /demo-trade with 'Welcome back!' toast.",
+    "regression_admin_portal": "/bfg-control-center-portal renders 'Admin access' card; form accepts admin@binaryfundglobal.com / Iamhear@#12; login network call in progress within timeout — page loads correctly (not a fresh regression)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ResetPassword.jsx: catch on the status GET intentionally sets linkState='valid' to preserve UX when the endpoint is missing on VPS — good fallback, well-scoped.",
+    "Post-submit fallback in submit() re-queries /status after a failed POST so that a subsequent 'used'/'expired' backend state can transition the screen — nice touch and works as expected.",
+    "Two elements in ResetPassword.jsx use data-testid=\"reset-go-signin\" (the error-state Back to Sign In button AND the reset-success screen's Go to Sign In button). Not a functional issue for the current tests, but duplicate testids on different screens can confuse future tests. Consider reset-success-go-signin for the success screen."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped per request)", "frontend": "100% (all required scenarios pass)" },
+  "test_credentials": "Trader qa.crosshair@bfgtest.com / TestPass123! (verified). Admin admin@binaryfundglobal.com / Iamhear@#12 (form loads; login network in-flight at end of run).",
+  "seed_data_creation": "None. Per instruction, no new accounts created on the VPS.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Route-intercept **/api/auth/reset-password/status* to exercise used/expired/invalid/valid screens because the endpoint is not yet deployed on the VPS. The valid form uses testid reset-back-signin (Link) rather than reset-go-signin; reset-go-signin is only on the used/expired/invalid and success screens.",
+  "rca of the issue": "No bugs found."
+}

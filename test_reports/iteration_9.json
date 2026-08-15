@@ -1,0 +1,39 @@
+{
+  "summary": "Rigorously tested the admin panel login and dashboard at https://binary-fund-run.preview.emergentagent.com/bfg-control-center-portal against the VPS backend (https://api.binaryfundglobal.com). All 17 test steps passed across desktop (1920x800) and mobile (390x844) viewports. Admin login works with clean credentials, with sloppy input (leading/trailing space + uppercase), correctly rejects wrong password, dashboard auto-restores on hard reload, and the user's bug report ('admin panel login hocche na') could NOT be reproduced.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin dashboard header @ 390x844", "issues": ["'Control Center' title wraps onto 2 lines in the header because the Refresh + Logout buttons take too much width; cosmetic only, still usable"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminPortal.jsx: sub text on StatCard concatenates value + sub without spacing on the raw DOM (e.g. 'Total users36' + '4 Google · 32 password' reads as 'Total users364...'). Visually fine because of the flex/mt-1 separation, but any text-content scraper will see the numbers concatenated. Consider a screen-reader / semantic separator.",
+    "AdminPortal.jsx: dashboard load() has no debounce on the search input, so every keystroke fires /api/admin/users. Works fine at current scale but will hammer the VPS as user count grows.",
+    "adminApi.js does not handle 401 globally — only the dashboard's load() catches 401/403 and logs out. UserDrawer's GET /api/admin/users/{id} on a stale token would just show an error string instead of forcing logout."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (not tested per request)", "frontend": "100%" },
+  "test_credentials": "admin@binaryfundglobal.com / Iamhear@#12 (verified working on VPS)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "VPS backend at https://api.binaryfundglobal.com is live and returning real data (36 users, 118 trades, $14,157 volume, google=4, password=32). Admin token lives 12h in localStorage key 'bfg_admin_token'. Full admin flow verified end to end; if user still reports 'login hocche na', it is almost certainly a client-side cache / mixed HTTP-HTTPS / DNS issue on their device — ask them for the exact error text from data-testid=admin-login-error and a screenshot of the network tab.",
+  "verified_scenarios": [
+    "Happy-path login -> dashboard -> localStorage token set (236 chars)",
+    "Stats cards: total_users=36, total_trades=118, total_volume=$14,157.00, win_rate=41.53%, total_pnl=$-770.04",
+    "Users table lists 25 rows, page-info '1-25 of 36', pagination Next -> '26-36 of 36' -> Prev -> '1-25 of 36'",
+    "Search 'gmail' -> 10 rows, search 'Bangladesh' -> 5 rows",
+    "Row click opens admin-user-drawer with profile / wallets / trades; drawer-close hides it",
+    "Refresh button reloads without error",
+    "Logout returns to login screen and clears bfg_admin_token",
+    "Sloppy email '  Admin@BinaryFundGlobal.com ' + correct password logs in successfully (trim/lowercase working)",
+    "Wrong password shows readable error 'Invalid admin credentials', stays on login, no token stored, submit button not stuck",
+    "Hard reload with existing token auto-restores the dashboard (auth persistence works)",
+    "Mobile viewport 390x844: login form fully usable, dashboard renders, stats stack vertically, table scrolls horizontally as expected"
+  ],
+  "rca of the issue": "USER'S ORIGINAL BUG COULD NOT BE REPRODUCED. Login works end-to-end from the Emergent preview against the VPS API. Most likely the user's report was recorded before the admin routes were deployed on the VPS (main agent's own note says '/api/admin/login now returns 200 via curl'). No further code change is needed for the login flow itself."
+}

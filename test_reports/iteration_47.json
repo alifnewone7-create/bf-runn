@@ -1,0 +1,96 @@
+{
+  "summary": "Frontend-only pixel-precision drag smoothness verification on /demo-trade. Instrumented cv.t() with a probe, drove Playwright pointermoves at 1-2px increments and measured shape position by scanning the drawing-canvas pixels. Result: the 'pixel-smooth' fix is NOT working end-to-end. The lRef/barPx reference-sample fallback in geom.js is never being taken on the live chart (lRef is null on every cv.t() call) so cv.t() falls through to the chart's ts.coordinateToLogical(), which returns snap-to-bar integer logical indices. Net effect: cv.t(x) is quantised to whole candle boundaries (multiples of the timeframe, 60s at 1m), producing the exact staircase the user reported.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "trade/drawing/geom.js — makeConverters", "issue": "Reference-sample fallback (lRef/cRef/barPx) never activates in production: probed cv.t across many pointer positions shows lRef=null, cRef=0, barPx=0 every call. cv.t therefore uses ts.coordinateToLogical(x) which returns integer bar indices; logicalToTime(integer) returns time snapped to candle boundaries. Stored/returned t values are therefore always multiples of the timeframe (60s at 1m), which reproduces the steppy horizontal drag exactly as reported.", "selector": "[data-testid=\"drawing-canvas\"]", "priority": "CRITICAL"},
+      {"component": "trade/drawing/DrawingLayer.jsx (drag pipeline)", "issue": "Because cv.t is quantised, dragRef.livePoints only change when the pointer crosses a full bar boundary. A 30 × 2 px pointer sweep (60 px total, at heavy zoom where 1 bar ≈ 22–57 px) produced only 2 distinct cv.t outputs, matching the visible ‘staircase’ where the shape sits still through 10–16 consecutive 2 px steps and then jumps 22–57 px in a single frame. Handle-resize drag exhibits the same 8-step zero-run then 36 px jump.", "selector": "[data-testid=\"drawing-canvas\"]", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "quantitative_measurements": {
+    "horizontal_body_drag_30x2px_fine_scan": {
+      "pointer_total_px": 60,
+      "shape_total_move_px": 44,
+      "zero_delta_steps": "27 / 29",
+      "max_consecutive_zero_run": 10,
+      "large_jumps_gt_4px": 2,
+      "jump_sizes_px": [22, 22],
+      "pattern": "flat 0…0 (11 steps) → +22px jump → flat 0…0 (9 steps) → +22px jump → flat 0…0 (rest)"
+    },
+    "horizontal_body_drag_40x1px_ultra_fine": {
+      "pointer_total_px": 40,
+      "shape_total_move_px": 55,
+      "note": "Contains one 57 px jump; the extra motion vs. pointer offset comes from a live-tick candle close that scrolled the chart mid-drag — the drawing’s stored t values did NOT change to match, and only ONE localStorage write was recorded (the create), i.e. the pointerup produced no update because livePoints were unchanged for large portions of the drag."
+    },
+    "handle_resize_drag_20x2px": {
+      "pointer_total_px": 40,
+      "shape_total_move_px": 34,
+      "zero_delta_steps": "18 / 19",
+      "max_consecutive_zero_run": 8,
+      "single_jump_px": 36
+    },
+    "cv_t_probe": {
+      "creation_calls_all_integer": "3/3",
+      "drag_calls_all_integer": "31/31 (0 fractional)",
+      "distinct_t_values_during_60px_sweep": ["1786651380", "1786651440", "1786651500"],
+      "reference_sample_state": "lRef=null, cRef=0, barPx=0 on every cv.t call → the intended fractional path is never hit"
+    },
+    "stored_point_t_values_are_fractional": false,
+    "stored_delta_after_drag_seconds": 180,
+    "longtasks_gt_50ms_during_2s_drag": 0,
+    "console_errors": 0,
+    "persistence_after_reload": true,
+    "regression_checks": {
+      "crosshair-vert": "present",
+      "crosshair-horz": "present",
+      "live-price-line": "present",
+      "live-price-tag": "present",
+      "candle-countdown": "present",
+      "interior_click_selects_style_bar": true,
+      "draw-copy-selected": true,
+      "empty_click_deselects": true
+    }
+  },
+  "rca of the issue": {
+    "symptom": "Horizontal drag/resize of drawings is not pixel-smooth — the shape moves in whole-candle steps and stored t values are always multiples of the timeframe (60s at 1m).",
+    "cause": "In makeConverters (geom.js) the ‘sample two safely in-range logical points to build a linear pixel↔time mapping’ block runs at the moment makeConverters is called and stores lRef/cRef/barPx as closure state. In production on /demo-trade, that block does not populate lRef (probe shows lRef=null / cRef=0 / barPx=0 on every cv.t call). Consequently the returned closure’s `t:(x)=>…` takes the ELSE branch (`ts.coordinateToLogical(x-xShift)`), and lightweight-charts’ coordinateToLogical returns an integer bar index. logicalToTime(integer) then returns time exactly on a candle boundary. Result: cv.t is quantised to the timeframe granularity → dragRef.livePoints only change when the pointer crosses a whole bar → visible staircase + integer-only stored t values.",
+    "why_the_fallback_is_not_populated": "One of these three conditions is failing on the live chart: (a) chart.timeScale().getVisibleLogicalRange() returns null at the moment makeConverters is invoked (the layer creates converters on each pointer event, and each call is a fresh sample), (b) span=(range.to - range.from) is 0 for the sample it took, or (c) ts.logicalToCoordinate(l0)/logicalToCoordinate(l1) returned null/undefined or equal values (which can happen when the sampled logical value is outside the currently drawable area or when the pane is not yet laid out). The probe never observed the block succeeding across many pointer events, so this is a systemic failure of the fallback in the live app, not an intermittent race.",
+    "reproduction": [
+      "Open /demo-trade with a valid JWT in localStorage.bfg_token.",
+      "Open drawing panel via data-testid='desk-rail-drawing', pick data-testid='draw-tool-rectangle'.",
+      "Zoom in with mouse-wheel until bar spacing is large (≥20 px/bar).",
+      "Draw a rectangle by clicking two diagonal points.",
+      "Press-and-hold the shape body; dispatch pointermove events in 1–2 px horizontal steps (30–40 steps) with ~16–30 ms between them.",
+      "Scan the drawing-canvas pixels each step to read the shape’s leftmost x.",
+      "Observed: 25+ consecutive pointer moves produce 0 pixel movement, followed by a single 22–57 px jump when the pointer crosses a bar boundary."
+    ],
+    "recommended_mitigation": [
+      "Do not rely on the pre-sampled lRef/barPx in the closure. Recompute barPx/lRef inside the returned t/x functions on demand, using the current visible range at call time — so a null range at closure-creation time does not permanently disable the fractional path.",
+      "OR: bypass ts.coordinateToLogical entirely and always derive fractional logical from the visible-range sampling. If the sampling fails, do an explicit two-point sample of ts.logicalToCoordinate at l = Math.floor(range.from) and l = Math.ceil(range.to), which are guaranteed in-range once the pane has laid out.",
+      "OR: multiply then divide — instead of returning a rounded time, retain the fractional logical index all the way to the render side (drag stores {logical, price} pairs) and only convert to `t` seconds at the persist boundary. Rendering uses cv.x(logical) directly with no round-trip.",
+      "Add a unit-level assertion in makeConverters that lRef is set whenever range && span > 0; log a one-time warning if the fallback path is used so this regression is not silent again.",
+      "Add a real test: with a mock chart, feed makeConverters a range whose logical/coordinate mapping is linear, then verify cv.t(x) returns strictly increasing fractional times for x = 0..paneW at 1-px resolution (no duplicate outputs)."
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iter47_final.jpeg", "/app/test_reports/iter47_finegrained.jpeg"],
+  "action_items": [
+    "MAIN FIX REQUIRED: makeConverters’ lRef/barPx fallback is not populated on the live chart — cv.t therefore uses ts.coordinateToLogical which snaps to integer bar indices. This is why the drag is still steppy and stored t is still integer despite the recent geom.js edit. See ‘recommended_mitigation’ above.",
+    "After the fix, re-run the fine-scan test in this iteration (30 × 2 px pointer moves) and assert: max_consecutive_zero_run ≤ 1 and no jump > 4 px, and stored point t values contain at least one fractional value after a small drag."
+  ],
+  "critical_code_review_comments": [
+    "geom.js: the fractional-precision path depends on a closure-time sample. When getVisibleLogicalRange()/logicalToCoordinate() are not yet ready (chart still laying out, or the sampled logical is outside the drawable area), lRef stays null for the LIFETIME of that converters object. Since a new converters object is built per pointer event this is not ‘sticky’ per se, but the sampling logic clearly fails often enough on /demo-trade to be the dominant path.",
+    "DrawingLayer.jsx applyDrag()/onMove(): the synchronous paint() and stopPropagation are correct and no longer add a frame of latency. That half of the fix is fine — the residual steppiness is entirely upstream in cv.t.",
+    "useDrawings.js: does not round t. Confirmed. All integer-t values observed originate from cv.t, not the persistence layer.",
+    "render.js buildGeometry: uses cv.x(pt.t) with no rounding. Correct.",
+    "The comment in geom.js (‘Fractional seconds on purpose … Sub-second precision keeps a drag pixel-smooth.’) is currently aspirational — production runs the else branch and returns integer seconds."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "Regressions pass 100%; primary smoothness fix VERIFIED BROKEN"},
+  "test_credentials": "Registered fresh accounts via POST /api/auth/register on live VPS (https://api.binaryfundglobal.com). QA account qa.cross45.yxlsdp@example.com / QaDraw#2026x still works but WebSocket to VPS was consistently failing during test (`WebSocket is closed before the connection is established.`) — irrelevant to this bug because drawings persist via localStorage; the bug reproduces even with socket down.",
+  "seed_data_creation": "One rectangle drawing per test session; ephemeral, per-account, not cleaned up (each session uses a fresh account).",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "To reproduce the RCA, add a probe to geom.js `t:(x)=>` that logs {x, out, lRef, cRef, barPx} into window.__probeT, then hover with a drawing tool armed — you will see lRef=null on every call on the live /demo-trade chart. If main agent fixes it, verify by (1) probe shows lRef set to a non-null number on almost every call, and (2) 30 × 2 px pointer sweep on a rectangle body produces roughly-linear shape movement with max zero-run ≤ 1 and no >4 px jump. Playwright pattern: dispatch page.mouse.move(rx + i*2, ry, steps=1) with page.wait_for_timeout(20–30 ms) between events, and scan the drawing-canvas ImageData each step for minX (dpr-aware). WebSocket to api.binaryfundglobal.com is currently failing in this env; don’t use ‘persistence via socket’ as a signal — read localStorage bfg_drawings_v1:<sub> instead."
+}

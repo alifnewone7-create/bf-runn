@@ -1,0 +1,34 @@
+{
+  "summary": "Verified the two iteration_57 follow-up improvements on the live preview frontend against the VPS backend: (1) ensureAuthed() dedupe (single in-flight promise) and (2) pre-connect ~900ms grace window on the very-first click. Registered a fresh trader on the VPS (qa+t03fzqil@example.com) and seeded bfg_token/bfg_user before navigating to /demo-trade. Placed 6 back-to-back trades ($1, mixed UP/DOWN) — balance $500→$494, ZERO 'Not authenticated' toasts, ZERO 'Not connected' toasts, 0 refresh calls. Confirmed a single click never places two trades (delta=1). Confirmed exactly 1 POST /api/auth/refresh per stale-token click (was 2 before). Payout renders 90% (never 0%). No console JS errors on the trade flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "socket.io trade/place (VPS)", "issue": "On a very-first click within ~80–150ms of navigation the client-side grace path emits trade/place as soon as ws 'connect' fires, but the OLD VPS backend still returns 'Not authenticated' because sid auth is background-scheduled and the inline-token fallback (new sio_hub.py) is not deployed yet. This is the same pending-VPS-deploy issue documented in iteration_57 and is NOT a frontend regression. Once qty/timing was normal (≥1s post-nav) all 6 trades placed cleanly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Grace-path (pre-connect) trade/place", "issue": "The pre-connect ws.once('connect') branch in placeTrade() emits trade/place directly without the ensureAuthed()-retry-once wrapper used by the ws.connected branch. If the server ack comes back 'Not authenticated' from this branch (fast-first-click race on the OLD VPS), the user sees a 'Not authenticated' toast and the trade is dropped — no auto-retry. Minor because the new sio_hub.py inline-auth on the backend will make this ack path succeed once deployed. Recommendation: reuse emitPlace(isRetry) from the connected branch inside onReady() so the pre-connect path also gets one transparent re-auth+retry.", "affected_selectors": ["[data-testid='trade-higher-button']", "[data-testid='trade-lower-button']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/test_sio_trade_race.py"],
+  "action_items": [
+    "Deploy the updated /app/backend/routes/sio_hub.py to the VPS to close the fast-first-click auth race server-side.",
+    "OPTIONAL frontend polish: apply the same ensureAuthed()-then-retry-once logic to the pre-connect ws.once('connect') branch of placeTrade (not just the ws.connected branch), so a first-click 'Not authenticated' ack self-heals until the VPS deploy lands."
+  ],
+  "critical_code_review_comments": [
+    "authInFlightRef dedupe (DemoTrade.jsx ~L170-197): single in-flight ensureAuthed() promise correctly shared between the socket 'connect' handler and the trade/place ack retry. Verified live — exactly 1 POST /api/auth/refresh per stale-token click (previously 2).",
+    "Grace path (DemoTrade.jsx ~L432-448): ws.once('connect', onReady) with 900ms setTimeout is correct — but it duplicates the emitPlace body instead of reusing the retry-capable version above. Would be cleaner (and would auto-heal one more failure mode) to define a single emitPlace(isRetry) and reuse it in both branches.",
+    "placeTrade does NOT gate on `placing` anymore (comment L346-348 explicit) — verified rapid 6 back-to-back clicks all succeed with correct optimistic + confirmed reconciliation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% on the two improvements under test (dedupe + grace period); the single unresolved fast-first-click 'Not authenticated' remains a pending VPS backend deploy, not a frontend regression"},
+  "test_credentials": "Registered qa+t03fzqil@example.com / Test@12345 on VPS (token+user in /tmp/qauser.json — will not persist across pod restarts).",
+  "seed_data_creation": "1 fresh trader registered on VPS. 6 successful $1 demo trades placed (balance 500→494), 1 additional test trade in TEST 4 (delta=1 confirmed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Frontend improvements from iteration_57 are BOTH verified live: (a) exactly 1 POST /api/auth/refresh per stale-token click (dedupe works), (b) no 'Not connected to trading server' toast on immediate clicks (grace period works). The remaining 'Not authenticated' seen on the very-first ~80ms click is caused by the OLD VPS backend not yet running the inline-auth sio_hub.py — deploy pending. Test approach: register a fresh user via POST /api/auth/register, seed localStorage bfg_token+bfg_user, then hit /demo-trade. To exercise the refresh-dedupe path: load /demo-trade with a valid token, poison localStorage.bfg_token to a garbage value, then toggle page.context.set_offline(true/false) to force a ws reconnect that will fail auth — the next click should trigger exactly ONE /api/auth/refresh POST.",
+  "rca of the issue": "Not applicable for this iteration — this run only verifies the two iteration_57 improvements. Root cause of the original 'Not authenticated' was documented in iteration_57 (frozen handshake token + background sid auth). Both client-side mitigations verified working here; backend inline-auth deploy still pending."
+}

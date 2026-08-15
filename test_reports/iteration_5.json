@@ -1,0 +1,29 @@
+{
+  "summary": "E2E frontend auth flow verified after backend brought up. Both /login (admin) and /registration (new user) succeed and land in the authenticated /demo-trade area with market data + demo wallet. No client_id error overlay; Google button rendered but disabled on both pages as intended.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Realtime market feed", "issue": "WebSocket to wss://<host>/api/socket.io fails to establish (console warning: 'WebSocket is closed before the connection is established'). Chart still renders via REST polling; likely socket.io transport / ingress websocket-upgrade issue.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Investigate socket.io websocket handshake failure on wss://fund-runner.preview.emergentagent.com/api/socket.io/ (transport=websocket). Likely ingress path or CORS/upgrade config; polling may be working but realtime updates should be verified.",
+    "Clarify expected demo wallet amount: test brief said '$10k demo wallet' for new registrations, but UI shows $500.00 DEMO for both admin and newly-registered user. Confirm whether $500 is intentional (matches seed) or backend should credit $10,000."
+  ],
+  "critical_code_review_comments": [
+    "GoogleButton correctly guards against missing REACT_APP_GOOGLE_CLIENT_ID (renders disabled) — good.",
+    "Registration form has no visible client-side validation error surface when country is empty (submit silently no-ops). Consider showing a validation message.",
+    "Socket.io client should log a clearer error and fall back gracefully; currently only browser-default warning is shown."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100% (5/5 checks in scope)"},
+  "test_credentials": "Admin: admin@binaryfundglobal.com / Iamhear@#12. Newly-created test user this run: testuser+cih7rc@example.com / Test@1234 (country: United States).",
+  "seed_data_creation": "Created 1 new user account (testuser+cih7rc@example.com) via /api/auth/register.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth flows (login & register) both work end-to-end and route to /demo-trade. Google OAuth intentionally disabled (no client id). Open items: (1) socket.io websocket handshake failure (still functional via fallback), (2) demo wallet showing $500 vs test-brief-expected $10k — needs product clarification.",
+  "rca of the issue": "N/A — no blocking bugs this iteration."
+}

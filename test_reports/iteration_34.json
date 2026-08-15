@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only verification of /demo-trade DrawingStyleBar bug fixes and new TradingView-style compact bar. Tested on desktop (1920x1080) and mobile (390x844) with JWT injected into localStorage.bfg_token. All 10 requested behaviours passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_results": {
+    "desktop_bar_top_centre": "PASS - bar centre x=842, chart centre x=842, offset=0.0 (no right-then-jump animation)",
+    "bar_stays_mounted_on_button_press": "PASS - onDown() bail via data-chart-overlay works; bar persisted through colour, style, thickness, visibility clicks",
+    "pen_palette_swatch": "PASS - draw-pen-btn -> draw-color-pop opens with 18 swatches; draw-color-f43f5e applied, popover closed, drawing stayed selected",
+    "line_style_popover": "PASS - solid/dashed/dotted toggle keeps popover open, active option marked",
+    "thickness_clamped_1_10": "PASS - initial 2; inc capped at 10 (disabled); dec capped at 1 (disabled)",
+    "visibility_toggle": "PASS - bar stays open after toggle",
+    "delete_and_close_buttons": "PASS - delete removes drawing + closes bar; X only closes bar",
+    "reselect_reopens_centred": "PASS - offset 0.0 after re-selecting via canvas click",
+    "mobile_bar_bottom_centre": "PASS - 390x844, bar y=598 (below chart mid at 350), centre offset=0.0",
+    "mobile_popovers_open_above_bar": "PASS - draw-color-pop bottom (591) <= bar top (598); draw-line-pop also above",
+    "mobile_edits_work": "PASS - colour change, style change, thickness inc (2->3), bar remains"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DrawingStyleBar.jsx: outer flex justify-center wrapper + inner tp-fade-up cleanly fixes the previous right-side-then-centre jump caused by combining -translate-x-1/2 with the transform-based fade animation.",
+    "pointer-events-none on wrapper with pointer-events-auto only on the inner bar correctly preserves chart pan on empty gutter areas.",
+    "data-chart-overlay=1 on both wrapper and bar plus DrawingLayer.onDown early-return prevents deselection when interacting with bar buttons - verified.",
+    "Minor: draw-line-pop uses left-1/2 -ml-[86px] centred under the LINE button; at 390px viewport it still fits, but consider a viewport-edge clamp if narrower devices are supported."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "qa.draw.tester2@binaryfundglobal.com JWT from /app/memory/test_credentials.md injected via localStorage.bfg_token",
+  "seed_data_creation": "Created transient trend_line drawings on QA account during testing; deleted through the style bar. A single leftover drawing may remain from the desktop reselect flow (harmless).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "On mobile the rail is hidden behind data-testid=mobile-chart-tools; click that first to reveal rail-drawing. Desktop uses desk-rail-drawing directly. Inject JWT after goto('/'), then goto('/demo-trade').",
+  "rca of the issue": "Two root causes were fixed: (1) DrawingLayer.onDown ran hit-testing on all pointerdown events including presses on the floating bar, deselecting the drawing and unmounting the bar - fixed with an early return when e.target.closest('[data-chart-overlay]'). (2) The old bar used absolute left-1/2 with -translate-x-1/2, which conflicted with the tp-fade-up transform animation and produced an initial right-side position that snapped to centre - fixed by moving centring to an outer flex justify-center wrapper so the transform on the inner bar no longer affects horizontal placement. Both fixes verified by pixel-accurate bbox measurements (offset=0.0) and by mounting persistence checks across all bar buttons."
+}

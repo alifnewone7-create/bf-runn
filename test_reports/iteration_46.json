@@ -1,0 +1,39 @@
+{
+  "summary": "Frontend-only verification of the new hover-cursor affordances on /demo-trade drawings. All primary acceptance criteria pass. Two separate Playwright runs against the live VPS (https://api.binaryfundglobal.com) with JWT injected into localStorage.bfg_token. Cursor was read from the chart host element (parent of [data-testid='drawing-canvas']) via inline style.cursor and getComputedStyle.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_behaviours": [
+    "Rectangle body hover -> cursor 'move' (inline+computed).",
+    "Rectangle corner handles (TL & BR — the only 2 stored corners) hover -> 'nwse-resize'. This is correct because a Rectangle drawing stores 2 points on the NW-SE diagonal; both handles are on that diagonal so both are nwse-resize. There is no TR/BL handle to produce nesw-resize for rectangles.",
+    "Horizontal_line: body -> 'move', handle -> 'ns-resize'.",
+    "Vertical_line: body -> 'move', handle -> 'ew-resize'.",
+    "Trend_line: body -> 'move', both endpoints -> 'nwse-resize' (endpoints drawn on NW-SE diagonal). Code path in cursorFor() correctly falls through to dx*dy sign, and abs<4 branches produce ns/ew when endpoints are nearly aligned.",
+    "Empty chart space hover -> cursor resets to '' (computed 'auto').",
+    "While a tool is armed (mode='draw') the host cursor is 'crosshair'.",
+    "While dragging the body of a selected shape the cursor is 'grabbing'; after pointerup it resets to '' immediately.",
+    "60-move sweep across chart with drawings: 0 longtasks >50ms observed via PerformanceObserver, no console errors, no visible jank. crosshair-vert / crosshair-horz elements still present (tracked by TradeChart's own DOM crosshair which is unrelated to host.style.cursor).",
+    "Regression - interior click selects the drawing (drawing-style-bar appears), draw-copy-selected button is present and clickable, click on empty space deselects (style bar unmounts) and returns pan cursor."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL / not in scope of iter 46: There is no keyboard/UI-affordance to disarm the currently-active drawing tool without completing a shape. Escape does nothing; clicking the already-active [data-testid=\"draw-tool-<id>\"] does not toggle draw mode off. Consider wiring Escape (or a second click on the active tool) to reset mode back to 'idle' — during automated testing this made re-hovering after arming difficult.",
+    "OPTIONAL: For rectangles, if TradingView-parity is desired, the model could expose 4 corner handles (TL, TR, BR, BL) so TR/BL show nesw-resize. Current 2-handle model is functional but limits diagonal resize direction options."
+  ],
+  "critical_code_review_comments": [
+    "DrawingLayer.jsx cursorFor() logic is correct and cheap (pure hit-test math, no allocations).",
+    "Hover handler is properly rAF-throttled and registered as passive pointermove on host; pointerleave clears the cursor. Good.",
+    "onDown sets 'grabbing' for body hits and the matching resize cursor for handle hits; onUp resets host.style.cursor = ''. Symmetric and clean.",
+    "onHover early-returns if target closest [data-chart-overlay] — correctly avoids running hit-tests while hovering the style bar / drawings panel."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "qa.cross45.yxlsdp@example.com / QaDraw#2026x (VPS login intermittently returns 200 with no token — fallback register worked reliably).",
+  "seed_data_creation": "None persisted; drawings created ephemerally during test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Cursor is set on the chart HOST element = parentElement of [data-testid='drawing-canvas'] (NOT the canvas itself, because the canvas has pointer-events:none outside draw mode). Read via host.style.cursor (inline) or getComputedStyle(host).cursor. Rectangles have only 2 handles (both on NW-SE diagonal -> nwse-resize). To disarm draw mode reliably in tests, either draw a 2-point shape (mode auto-exits) or pick a different tool — do NOT rely on Escape or on toggling the same tool button."
+}

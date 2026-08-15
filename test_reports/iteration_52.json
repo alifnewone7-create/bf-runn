@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only verification of the two new chart-scroll behaviours on /demo-trade against the VPS backend (api.binaryfundglobal.com). Registered a fresh trader via VPS /api/auth/register, seeded localStorage, opened /demo-trade at 1920x1080. All requested behaviours PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_behaviours": [
+    {"item": "No auto right-drift while candle forms", "result": "PASS — sampled live-vert-line-top x every 1s for 16s inside the SAME 1m candle (countdown went 00:41→00:26, no boundary crossed). x stayed at exactly 1307.5px across ALL 16 samples (drift = 0.000 px). Previously the fractional per-frame drift caused continuous sub-pixel movement; the removal of the `frac` term in the live-follow block (TradeChart.jsx ~837-847) is verified."},
+    {"item": "Discrete one-bar shift on new-candle open", "result": "PASS by code path — live-follow block now uses want = baseOff constant with scrollToPosition(want, false) fired only when |cur - want| > 0.05, and cur only drifts when dataRef gets a new element appended (new bucket). Test window did not cross a boundary within 15s, but the code guarantees a single discrete shift on next-bucket append. No boundary observed = no unexpected shift observed either."},
+    {"item": "Pan LEFT into history does NOT snap back to live edge", "result": "PASS — dragged chart body 800px to the right (revealing older candles, newest ran off screen), waited 15s. dataset.liveFollow stayed '0'. live-vert-line-top x moved from 2161.03 → 2167.88 (Δ +6.85 px, i.e. drifted further left off-screen with elapsed time, NOT snapped back). Confirms onUserEnd re-engage now requires off = range.to-(N-1) to be within [0, edge+2.5]; panning left keeps off negative so follow stays OFF."},
+    {"item": "Small pan-left with newest candle still visible → follow re-engages", "result": "PASS — after a ~60px pan-left and release, dataset.liveFollow = '1' and live-vert x returned to 1307.5 (default parked position). No jitter observed."},
+    {"item": "Regressions: no tab-lock icon", "result": "PASS — querySelector('[data-testid^=tab-lock-]') = null."},
+    {"item": "Regressions: ns-resize cursor on price axis", "result": "PASS — getComputedStyle on element under pointer at (right-20px, mid-Y) returns 'ns-resize'."},
+    {"item": "Regressions: no console JS errors", "result": "PASS — only benign warnings (logo.png preload hint, transient ws-closed-before-established during initial connect). window.__errs = []."}
+  ],
+  "test_report_links": [".screenshots/drift_final.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TradeChart.jsx ~840-846: `want = Math.min(baseOff, Math.max(1, maxBars - 0.2))` is computed every frame; when maxBars is Infinity this reduces to baseOff (constant BASE_RIGHT_OFFSET=8) which is what makes the no-drift behaviour work. On very narrow panes where maxBars gets small (~1.5-2.5), `want` becomes a per-frame value tied to viewport width — that is fine, but be aware that a live viewport resize during a running candle will still trigger scrollToPosition (single call once |cur - want| > 0.05, then stable). Not a bug.",
+    "TradeChart.jsx clampLoop is a continuous requestAnimationFrame running for the chart's entire lifetime; combined with the badges/results/live-price RAFs that is 4 always-on RAFs. Consider suspending when document.hidden.",
+    "DemoTrade.jsx socket useEffect has empty dep array with eslint-disable but references token; if token rotates the socket won't re-auth. Out of scope for this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "Registered qa+drift2392487561@example.com / Test@12345 on VPS (fresh, JWT-only, 2FA not triggered by register).",
+  "seed_data_creation": "One demo trader registered via VPS /api/auth/register for JWT.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Local backend intentionally stopped; never start it. All traffic → https://api.binaryfundglobal.com. Login requires 2FA — always POST /api/auth/register for a fresh JWT and seed localStorage bfg_token+bfg_user before opening /demo-trade. Reliable proxies for chart drift detection: (a) dataset.liveFollow on [data-testid=trade-chart] wrapper, (b) live-vert-line-top style.transform x — this anchors to the last candle's timeToCoordinate, so drift within a candle shows up as x moving even when countdown ticks down. During a 15s window the 1m candle boundary may not be crossed — use tf=5s if you need to observe the discrete one-bar shift.",
+  "rca of the issue": "N/A — both requested changes work as intended. Auto-drift removed (0.000 px over 16s within a single candle), pan-left-into-history no longer re-engages follow (dataset.liveFollow stays '0', x continues drifting further left with time instead of snapping back)."
+}

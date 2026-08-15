@@ -1,0 +1,36 @@
+{
+  "summary": "Verified REACT_APP_API_BASE override works. All frontend API traffic routes to https://api.binaryfundglobal.com and NOT to the emergent placeholder host. Confirmed via live network trace on landing page and login page (including a real POST /api/auth/login that returned 401 from the VPS).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": {
+    "env_file_ok": "/app/frontend/.env contains REACT_APP_API_BASE=https://api.binaryfundglobal.com (line 2) and REACT_APP_BACKEND_URL kept as emergent placeholder (line 1, unused).",
+    "apiBase_priority_ok": "/app/frontend/src/lib/apiBase.js exports API_BASE = REACT_APP_API_BASE || REACT_APP_BACKEND_URL — VPS wins.",
+    "no_hardcoded_urls": "grep of /app/frontend/src shows only apiBase.js references either env var; no hardcoded emergentagent or binaryfundglobal URLs elsewhere.",
+    "runtime_network_trace_home": [
+      "GET https://api.binaryfundglobal.com/api/config/public (x2)"
+    ],
+    "runtime_network_trace_login_submit": [
+      "GET https://api.binaryfundglobal.com/api/config/public -> 200",
+      "POST https://api.binaryfundglobal.com/api/auth/login -> 401"
+    ],
+    "requests_to_emergent_api_host": 0,
+    "requests_to_vps_api_host": 3,
+    "bundle_baked_in": "Compiled bundle.js served by frontend triggers XHRs to api.binaryfundglobal.com at runtime, confirming REACT_APP_API_BASE was baked into the build. Direct HTTP fetch of bundle from python was 403 (Cloudflare bot block) — runtime evidence is authoritative."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Consider removing the stale REACT_APP_BACKEND_URL line from /app/frontend/.env to avoid future confusion — apiBase.js already ignores it, but the placeholder value is misleading.",
+    "Also add REACT_APP_API_BASE to /app/frontend/.env.example (if it exists) so future clones don't miss it."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Frontend uses REACT_APP_API_BASE from /app/frontend/.env for all API calls via /app/frontend/src/lib/apiBase.js. VPS backend at api.binaryfundglobal.com is external — do not try to control or restart it. CORS is properly configured on the VPS (POST /api/auth/login returned 401 with body, not blocked). If REACT_APP_BACKEND_URL gets platform-reset again, the app is unaffected."
+}

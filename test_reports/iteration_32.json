@@ -1,0 +1,50 @@
+{
+  "summary": "Frontend-only regression + verification run for the 4 follow-up drawing fixes on /demo-trade (backend on the VPS, never touched). VERIFIED PASS: (1) emit fix from iteration_31 is intact - captured raw frames are exactly 42[\"drawings/save\",{...}] with NO trailing null and the rows really land on the server; (2) full server persistence - 2 shapes on EURUSD_OTC survive localStorage.clear() + reload/re-login with identical ids/points/colour/width/style; (3) FIX 1 (UUID ids) - client ids are valid UUID v4 and the server stores the SAME id; 4 saves on one shape (create + width + style + endpoint drag) produced exactly ONE server row, and deleting it removed it for good; (4) FIX 2 (outbox) - a create + a delete made while the socket was down were flushed on reconnect and are present on the server; (5) FIX 3 - drawings/get is re-issued on every reconnect and correctly loaded a server-seeded shape after 14s offline (retry loop exhausted first); (6) live cross-session sync (2 contexts, same account, same pair): create / restyle / delete / clear-all all propagate in <3s without reload; (7) per-pair isolation on the server (EURUSD 1 vs GBPUSD 2) after localStorage.clear() + reload; (8) mobile 414x860: rail-drawing -> drawings-panel-mobile (13 tools, 2 columns at x 12/209), tap-to-place works, style bar (y 506-652) does not overlap mobile-clock or drawing-mode-chip, drawing survives LS clear + reload; (9) no regressions - idle pan/zoom, asset tabs, timeframe panel (1m->5m->chart-tf-*), chart type panel (candles/area), $1 UP demo trade (150.19 -> 149.19, Trades 1, later settled to 151.09), zero console errors. TWO NEW DEFECTS FOUND: a deterministic reconnect race that makes offline-created drawings vanish from the UI, and offline restyles being lost server-side; FIX 4 (fib labels) is only partially effective.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "socket.io drawings/save (flush burst)", "issue": "When the outbox flushes several saves for the SAME id in one burst, the row that ends up stored is NOT the last one sent (create-with-default-style won over the two later restyle saves) -> handlers appear to be processed concurrently/out of order. Server should serialise writes per (account, drawing id) or the client must dedupe the outbox."},
+      {"endpoint": "socket.io drawings/*", "issue": "STILL OPEN (needs VPS deploy): unknown/empty symbol is accepted and answered with an empty list instead of an error ack."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "render.js fib labels (FIX 4 incomplete)", "issue": "The Math.min(Math.max(right-4,96), W-4) clamp stops the chart-edge clipping, but it ignores the label text width (~62px) and the desktop vertical tool rail (rail bbox x=72..118, canvas starts at x=64 => canvas x 8..54). With the shape pushed off the left edge, labels are right-aligned ending at canvas x=96, so they start around canvas x=34 and the '38.2%', '23.6%', '0.0%' prefixes are hidden BEHIND the rail (screenshot /app/test_reports/it32_fib_crop.png). Clamp should be max(right-4, railRightInCanvas + ctx.measureText(text).width + pad) or the label should flip to left-align when the shape is off-screen left.", "selector": "drawing-canvas", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Reconnect: outbox flush vs drawings/get refetch (NEW, reproduced 2/2)", "issue": "useDrawings onConnect() flushes the outbox with fire-and-forget emits and then immediately emits drawings/get on the same tick. The server answers the get before it has applied the flushed saves, so the client overwrites its local state with the pre-flush list and the drawing created while offline DISAPPEARS from the chart / object list (frames: 3x drawings/save + 1x drawings/delete + drawings/get at t=32.7, ack at t=32.9 without the new shape). The row IS on the server and reappears after a manual reload, so this is a UI/state consistency bug, not data loss. Fix: send the flushed writes with acks and only refetch once all acks return (or merge the refetched list with still-unacked local writes / delay the refetch).", "affected_selectors": ["drawing-canvas", "drawings-object-list"]},
+      {"flow": "Offline restyle (FIX 2 partial)", "issue": "A create + 2 restyles done while offline are queued as 3 separate full-snapshot saves; after the flush the server row has the DEFAULT colour/width (client shows width 3 / #f43f5e, server stores width 2 / #14b877) -> the styling made offline is silently lost after a reload. Dedupe the outbox by (event, drawing id) keeping only the newest save (and drop earlier saves for an id that is later deleted).", "affected_selectors": ["draw-width-3", "draw-color-f43f5e"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/sio_drawings_dump.py",
+    "/app/tests/sio_drawings_seed.py",
+    "/app/tests/sio_drawings_probe.py"
+  ],
+  "action_items": [
+    "Fix the reconnect race in useDrawings.onConnect: do not refetch drawings/get until the flushed outbox writes are acked (or merge the server list with locally pending writes) - offline-created drawings currently vanish from the UI until a manual reload.",
+    "Dedupe the outbox per (event, drawing id) so only the latest save survives; otherwise offline restyles are lost server-side (server applied the oldest snapshot of the burst).",
+    "Improve the fib label clamp: account for the measured text width and the desktop tool rail (or left-align labels when the shape is off the left edge) - percentage prefixes are still hidden behind the rail.",
+    "Consider persisting the outbox (e.g. in localStorage) - it currently lives only in a ref, so a reload while offline drops every queued write silently.",
+    "Backend (next VPS deploy): validate symbols in drawings/* and serialise per-drawing writes so a burst of saves for one id is applied in order."
+  ],
+  "critical_code_review_comments": [
+    "useDrawings.onConnect(): `flush outbox (fire-and-forget) -> fetchList()` on the same tick is a guaranteed read-before-write race; the get ack overwrote local state and dropped the just-flushed shape in 2/2 runs.",
+    "useDrawings.fetchList(): `if (!ok || !answered)` is always true right after emit (the ack is async), so every fetch schedules a 4s retry and can emit up to 40 duplicate drawings/get for one pair switch; gate the retry on a real timeout instead.",
+    "useDrawings outbox is unbounded, un-deduped and not persisted; a burst of saves for the same id plus server-side concurrency loses the newest state.",
+    "render.js fib label clamp uses a hard-coded 96px minimum instead of the measured text width + rail width, so the fix is only partial.",
+    "TradeChart.jsx is still >700 lines (guideline); the drawing wiring should move into a useChartDrawingUI hook."
+  ],
+  "updated_files": [
+    "/app/tests/sio_drawings_dump.py",
+    "/app/tests/sio_drawings_seed.py"
+  ],
+  "success_rate": {"backend": "not in scope (VPS)", "frontend": "8 of 10 requested areas fully pass; FIX 2 partial (offline restyle lost + reconnect race) and FIX 4 partial (labels still behind the rail)"},
+  "seed_data_creation": "Throwaway drawings on EURUSD_OTC / GBPUSD_OTC / USDJPY_OTC (incl. one server-seeded horizontal_line via /app/tests/sio_drawings_seed.py). CLEANED UP: drawings/clear run on EURUSD_OTC, GBPUSD_OTC, USDJPY_OTC, EURAUD_OTC - all verified 0 server-side. One $1 UP demo trade placed as a regression check (balance 150.19 -> 149.19 -> settled 151.09).",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "nepoca@hamham.uk / 12345678 (/app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "Helper scripts: /app/tests/sio_drawings_dump.py [--clear] SYM... dumps/clears the server rows for the test account; sio_drawings_seed.py SYM seeds one cyan dashed horizontal_line. Login REST returns the JWT under 'token'; socket path is /api/socket.io/ with auth={'token': ...}. Browser tricks: page.on('websocket') + framesent/framereceived gives the raw socket.io frames as str; read localStorage['bfg_drawings_v1:<accountId>'] for client state; real testids are draw-color-f43f5e (NO '#'), desk-rail-tf / desk-rail-drawing / desk-rail-type / desk-rail-indicators, chart-tf-5m, desk-chart-type-area, trade-panel-desktop >> trade-higher-button. Use page.context.set_offline(True/False) to simulate socket loss - that reproduces both new bugs 100% of the time (offline create -> reconnect -> shape gone from UI but present on server after reload; offline restyle -> server keeps the default style). Panel gotcha: picking a tool closes the drawings panel, and clicking desk-rail-drawing while it is open closes it - always check is_visible('drawings-panel-desktop') first. To push a shape to the left edge for the fib label check, drag the chart left 6x250px in idle mode.",
+  "rca_of_the_issue": "Both new defects come from the reconnect path in useDrawings.js. onConnect() does `outboxRef.current.splice(0)` and re-emits each queued write with ws.emit (no ack), then calls fetchList() synchronously. Because the writes carry no ack the client cannot know when the server has applied them, and the python-socketio server dispatches each event as an independent task, so the drawings/get handler answered from the pre-flush state (ack observed 200ms after the burst, without the new shape) and setDrawings(resp.drawings) removed the offline shape from state + localStorage. The same lack of ordering makes the 3 queued full-snapshot saves for one id land out of order, so the stored row kept the create-time default style instead of the last restyle."
+}

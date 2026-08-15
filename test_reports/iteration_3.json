@@ -1,0 +1,56 @@
+{
+  "summary": "Frontend-only regression test of the redesigned /demo-trade page (premium dark-green Quotex-style layout). All redesigned surfaces render correctly and are fully interactive on both desktop (1920x1080) and mobile (390x844). Login flow, header/tabs/balance/avatar, left icon sidebar, candlestick chart with live GMT clock and all 14 timeframe buttons, right desktop trade panel (stepper + quick amounts + duration picker + payout preview + HIGHER/LOWER), Asset Picker modal (search + 4 category chips + add/close tab), Account Switcher dialog (all 4 account cards with rules), and mobile bottom trade panel all work. No horizontal overflow at either viewport. Trade placement API path works (balance updated -$1 after a $1 HIGHER trade settled).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Trade settlement clearing open-trades count",
+        "issue": "After placing a 5s HIGHER $1 trade and waiting 12s, balance correctly updated (10004.98 -> 10003.98, $1 loss applied), but the open-trades-count badge still shows '1' and the trade remained visible in the Trades panel. Backend seems to have settled the trade (balance changed) but the client did not receive/apply the s_orders/close event to remove it from openTrades. Likely related to transient websocket warning: 'WebSocket is closed before the connection is established' seen in console. Not blocking (may be a timing artifact of the preview URL WS) — worth verifying against a longer test window.",
+        "affected_selectors": ["open-trades-count", "trades-panel"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "AccountSwitcher / AssetPicker dialogs (a11y)",
+        "issues": [
+          "Console warning: 'Missing `Description` or `aria-describedby={undefined}` for {DialogContent}'. Add a <DialogDescription> or aria-describedby to DialogContent for a11y (Radix requirement)."
+        ]
+      }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_3.json"],
+  "action_items": [
+    "(LOW) Investigate why open trade stays in openTrades after settle on preview URL (WebSocket close-before-establish warning). Consider a fallback: after N seconds past close time, re-fetch /api/trade/open to reconcile state.",
+    "(LOW / a11y) Add DialogDescription (or aria-describedby={undefined} on DialogContent) to AccountSwitcher.jsx and AssetPicker.jsx to remove Radix Dialog console warning."
+  ],
+  "critical_code_review_comments": [
+    "DemoTrade.jsx line 291: user initial letter fallback uses `(user.nickname || user.full_name || user.email || 'B')[user.nickname ? 1 : 0]` — the `user.nickname ? 1 : 0` index looks wrong (should be 0 in both cases). If user.nickname is truthy it picks the second character. Cosmetic only.",
+    "AccountSwitcher & AssetPicker DialogContent lack DialogDescription — Radix a11y warning surfaced in console.",
+    "DemoTrade.jsx: socket.io configured with `transports: ['websocket']` only (no polling fallback) — preview URL occasionally logs 'WebSocket closed before established'. Consider `transports: ['websocket','polling']` for resilience in preview envs.",
+    "DemoTrade.jsx: the openTrades list is only pruned via WS `s_orders/close` / legacy `trade_closed`. If either event is missed (e.g., WS reconnect), stale open trades persist until page reload. Suggest a light poll (or a 'settle-past-due' local timer) that calls /api/trade/open to reconcile."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (skipped)", "frontend": "95%" },
+  "test_credentials": "testagent_1784768084@example.com / TestAgent@1234 (worked). Balance $10,004.98 (demo). Balance auto-decreased to $10,003.98 after placing a $1 HIGHER 5s trade — confirms trade-place API + settlement working.",
+  "seed_data_creation": "None — used existing test user.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Redesigned /demo-trade page verified end-to-end (desktop + mobile). Only 2 low-priority items: (1) stale open trade after WS reconnect on preview; (2) Radix dialog a11y warning. Backend intentionally not touched. Screenshot artifacts: /tmp/demo_trade_desktop.png, /tmp/account_switcher2.png, /tmp/demo_trade_mobile.png.",
+  "detailed_verification": {
+    "login_to_demo_trade": "PASS — landed on /demo-trade after login submit",
+    "header_elements": "PASS — demo-balance, balance-value ($10,004.98), account-badge (DEMO), deposit-button, trade-avatar, trade-logo-link, add-asset-button all visible",
+    "asset_tabs_desktop": "PASS — EUR/USD, GBP/USD, USD/JPY, EUR/AUD all present with payout %",
+    "sidebar_no_wrapping": "PASS — 6 items (Portfolio/History/Signals/Profile/Help/Settings) + Logout, each 56x53.5 px, no wrap",
+    "candle_chart_and_clock": "PASS — chart renders, GMT clock ticks (e.g. '09:20:41 GMT')",
+    "timeframe_14_buttons": "PASS — all 14 (5s..1d) visible; switching 5s->1m works with skeleton",
+    "investment_stepper": "PASS — quick-amount-50 -> $50/+$41.00 payout; +2/-1 stepper -> 52 then 51",
+    "duration_picker": "PASS — popover opens, TIMER/TIME toggle both work, timer-chip-300 -> 05:00, timer-chip-5 -> 00:05",
+    "place_trade": "PASS — balance decreased $10,004.98 -> $10,003.98 for $1 loss; entry price line drawn ($1 ▲ at 1.09578)",
+    "open_trades_toggle_and_panel": "PASS visibility, MINOR — panel opens showing open trade with countdown and recent results (+$0.88, +$4.10). But see integration_issue re: stale open trade after settle",
+    "asset_picker": "PASS — modal opens, search 'USD' filters, 4 category chips visible, picking AUDUSD_OTC adds tab and close-tab-* removes it",
+    "account_switcher": "PASS — dialog opens, all 4 cards render (DEMO active, BASIC $49 / STANDARD $99 / PREMIUM $199 locked) with rules; Escape closes",
+    "mobile_viewport_390x844": "PASS — mobile asset tabs visible, trade-panel-mobile fixed at bottom (y=709, h=135) with amount + duration + LOWER/PROFIT/HIGHER; sidebar correctly hidden; chart visible; 0px horizontal overflow",
+    "console_errors": "Only 2 non-critical warnings: (a) transient WebSocket close-before-established (auto reconnect works), (b) Radix DialogContent missing aria-describedby"
+  }
+}

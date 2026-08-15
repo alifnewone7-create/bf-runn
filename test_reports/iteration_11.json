@@ -1,0 +1,73 @@
+{
+  "summary": "Frontend-only retest of the redesigned /reset-password page (AuthLayout shell), success screen, /forgot-password 30-minute copy, and regression of login/dashboard/demo-trade/profile/admin portal. All 20+ checks passed. No blocking issues found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ResetPassword.jsx / ForgotPassword.jsx / AuthLayout.jsx are clean, share the same shell, respect data-testid contract, and correctly consume API_BASE from lib/apiBase (all XHR go to api.binaryfundglobal.com).",
+    "Reset flow correctly surfaces the VPS 'Invalid or expired token' error verbatim; the 30-minute expiry copy is present in both ForgotPassword success screen and the (undeployed) backend emailer.py."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "Trader: qa.crosshair@bfgtest.com / TestPass123! ; Admin: admin@binaryfundglobal.com / Iamhear@#12",
+  "seed_data_creation": "None (no accounts created — real prod DB).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "detailed_results": {
+    "reset_page_desktop_1920x800": {
+      "brand_panel_tagline_visible": true,
+      "auth_tabs_visible": true,
+      "heading_Reset_your_password": true,
+      "ssl_note_visible": true,
+      "new_password_input_toggle_flips_type": "password -> text",
+      "confirm_password_input_toggle_flips_type": "password -> text",
+      "back_to_sign_in_navigates_to_login": true,
+      "horizontal_overflow_px": 0
+    },
+    "reset_page_validations": {
+      "short_password_error": "Password must be at least 8 characters long.",
+      "mismatched_confirm_error": "Both passwords must match.",
+      "empty_token_error": "This reset link is invalid. Please request a new one.",
+      "bogus_token_vps_error": "Invalid or expired token (HTTP 400 from https://api.binaryfundglobal.com/api/auth/reset-password)",
+      "submit_button_reenables_after_error": true
+    },
+    "reset_success_screen_stubbed_200": {
+      "reset_success_testid_visible": true,
+      "heading_Password_reset_successfully": true,
+      "green_check_badge": true,
+      "confirmation_paragraph": true,
+      "go_to_sign_in_navigates_to_login": true
+    },
+    "reset_page_mobile_390x844": {
+      "brand_panel_hidden": true,
+      "top_left_logo_bar_visible": true,
+      "submit_visible_and_tappable": true,
+      "form_horizontal_overflow_px": 0,
+      "success_screen_horizontal_overflow_px": 0,
+      "success_go_signin_visible": true
+    },
+    "forgot_password": {
+      "success_copy_contains_30_minutes": true,
+      "success_copy_contains_1_hour": false,
+      "existing_email_shows_forgot_success": true,
+      "nonexistent_email_shows_identical_forgot_success": true
+    },
+    "regression": {
+      "login_qa_crosshair_success": true,
+      "post_login_redirect": "/demo-trade (expected trader landing)",
+      "dashboard_route_loads": true,
+      "demo_trade_route_loads": true,
+      "profile_email_visible": true,
+      "profile_email_unverified_badge_present": true,
+      "profile_resend_button_present": true,
+      "admin_portal_login_no_errors": true,
+      "xhr_hosts_observed": ["api.binaryfundglobal.com", "binary-fund-run.preview.emergentagent.com (static assets/HMR only, no API)"]
+    }
+  },
+  "context_for_next_testing_agent": "Reset page redesign fully verified. VPS backend has NOT been redeployed with the new 30-min expiry backend code yet — real reset links cannot be exercised end-to-end; test uses ?token=demo123 which reliably returns VPS 400 'Invalid or expired token'. Login for the trader redirects to /demo-trade (not /dashboard) — that is the current app behavior, not a bug. All /api/* XHR go to api.binaryfundglobal.com."
+}

@@ -1,0 +1,27 @@
+{
+  "summary": "Verified the s_orders/close dedupe fix on DemoTrade.jsx (~L221-227). Placed two trades ($1 UP on EURUSD_OTC then $1 DOWN on GBPUSD_OTC, both 01:00 timer), switched pairs freely during the run, waited 90s for settlement. RESULT: ZERO React 'Encountered two children with the same key' warnings (was 32 in iter 49), balance moved once per trade ($500 -> $499.90 = -$1.00 loss + $0.90 win), and all pair-switch regressions from iter 49 still pass.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/it50_loaded.png",
+    "/app/test_reports/it50_duration_open.png",
+    "/app/test_reports/it50_after_settle.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "s_orders/close handler now dedupes history by id (DemoTrade.jsx L226): `setHistory((h) => (h.some(x=>x.id===trade.id) ? h : [trade, ...h]).slice(0,50))`. Legacy trade_closed handler applies the same guard (L234). Combined with shownResultsRef in pushResult() (L70-75, L74), duplicate settlement events are fully idempotent for both history rows AND on-chart result cards.",
+    "NOTE (not a bug): querying [data-testid^='closed-trade-'] across the whole document returns count=4 unique=2 for 2 settled trades because TradesPanel mounts BOTH the desktop floating panel (L60-69) and the mobile bottom-sheet (L90-118) into the DOM whenever `open` is true — each contains its own copy of historyRows. Only the viewport-appropriate one is visible (hidden md:block vs md:hidden). Each panel individually renders exactly one row per unique trade id, which is why no React key collision fires. If E1 wants to be extra defensive, wrap the mobile sheet in a media-query guard (or render historyRows conditionally per viewport) so the mobile DOM isn't paid for on desktop, but this is an optimization, not a correctness bug."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (VPS, skipped)", "frontend": "100% for all 4 requested features" },
+  "test_credentials": "Registered fresh via POST https://api.binaryfundglobal.com/api/auth/register — qa.it50.1786653122@example.com / QaDraw#2026x. JWT saved to /app/test_reports/it50_token.txt for future re-use (same $499.90 balance). Older QA account qa.cross45.yxlsdp@example.com remains 2FA-gated.",
+  "seed_data_creation": "Fresh VPS trader account + 2 settled trades in its history.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Duplicate-settled-trade bug from iter 49 is FIXED and verified. Evidence per test run: BALANCE BEFORE=$500.00 -> AFTER=$499.90, CLOSED TRADE ROWS count=4 unique=2 (expected — desktop+mobile TradesPanel both mount in DOM), OPEN TRADES=0 post-settle, tab-lock-EURUSD_OTC and tab-lock-GBPUSD_OTC both rendered simultaneously, 'Position locked' toast never appeared across 3 pair switches (EURUSD->GBPUSD->USDJPY->EURUSD), all overlays (crosshair-vert/horz, live-price-line, live-vert-line-top/bottom, live-price-tag, candle-countdown) present after settlement, ZERO 'Encountered two children with the same key' warnings, ZERO other React warnings/errors (only benign devtools + logo preload + one initial WS attempt warning). result cards had already auto-expired after the 90s wait (RESULT_TTL=9000ms) so trade-result-dot-* count was 0 at final query — that is expected behaviour, not a miss; pushResult still runs exactly once per id via shownResultsRef Set. Duration picker exposes timer-chip-5/10/15/... testids if a future run needs sub-minute expiries.",
+  "rca of the issue": "Original iter-49 bug: both socket handlers ('s_orders/close' and legacy 'trade_closed') fired for the same settled trade, and each unconditionally prepended `trade` into `history`, so React saw two siblings with the same `t.id` key. Fix: both handlers now guard with `h.some(x => x.id === trade.id) ? h : [trade, ...h]`. This mirrors the existing shownResultsRef Set-based dedupe used by pushResult() for the on-chart cards. Verified end-to-end with a live 2-trade session on the VPS."
+}

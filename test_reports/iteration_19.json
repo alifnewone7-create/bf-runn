@@ -1,0 +1,31 @@
+{
+  "summary": "Tested TradeChart.jsx sanitizeCandles fix. Unit-level logic PASSES all 8 synthetic cases (outlier drop, 2%/5% normal volatility preserved, low>high dropped, negative OHLC dropped, empty/null handled, high-side outlier dropped). /demo-trade page loads without runtime errors (0 console errors, 7 canvases rendered, trade-chart testid present). HOWEVER, the outlier bug is NOT fully resolved in production: live /demo-trade still shows 3 outlier candles floating at ~1.128 disconnected from main EUR/USD (OTC) band (median 1.066, main max ~1.10). Deviation is only ~5.8% which is well below the 25% sanitizeCandles threshold, so they pass through the filter. The fix as-implemented only catches EXTREME outliers (>25%) and misses the visible-but-moderate cluster in real data.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TradeChart / sanitizeCandles", "issue": "Outlier candles still visible on /demo-trade EUR/USD (OTC). API returns 3 candles at ~1.128 (open 1.12845, 1.12674, 1.12475) while batch median is 1.06635 — deviation ~5.8%, below the 25% threshold so they pass through sanitizeCandles unchanged. See attached screenshot: cluster floats near 1.128 while main band caps at 1.10.", "selector": "[data-testid=trade-chart]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/test_sanitize_candles.mjs"],
+  "action_items": [
+    "The 25% midprice-vs-median threshold in sanitizeCandles is too lenient. In the real EUR/USD (OTC) candle history, 3 outlier bars sit ~5.8% off the batch median and remain visible on the chart. Consider tightening the historical-bar threshold to something like 3-5% (e.g. median*0.95..1.05), OR use a robust statistic like MAD (median absolute deviation) with a multiplier so it adapts to legitimate volatility. As a safer approach: compute the interquartile range of midprices and drop bars outside median +/- 3*IQR (or similar), rather than a fixed 25% band.",
+    "Also consider filtering by |low - median| / median and |high - median| / median rather than only the (open+close)/2 midprice — some outlier bars may have extreme highs/lows that visually escape the main band even if their midprice is closer.",
+    "Root cause upstream: the VPS /api/market/candles endpoint is persisting outlier OHLC rows into the candle store. A backend cleanup script for the persisted store, or backend-side rejection of ticks that jump >X% from the previous close before they are written, would fix this at the source rather than papering over it in the frontend."
+  ],
+  "critical_code_review_comments": [
+    "sanitizeCandles logic is correct per spec but threshold (25%) is empirically too loose — real user-visible outlier is only ~5.8% off median. Recommend using IQR/MAD-based robust filter.",
+    "Filter is applied only on initial fetch and pagination merge. If new candles arrive via socket 'candles/append' style events (if any) they bypass sanitize. Verify no such code path exists.",
+    "Tick guard uses lastCandleRef.current.close which starts null; first tick after reset is not guarded (fine for now, but noted).",
+    "loadOlderRef.current is reassigned every render (line 338), which is fine because it's read via ref, but consider useCallback + ref to avoid GC churn."
+  ],
+  "updated_files": ["/app/tests/test_sanitize_candles.mjs (new — unit tests for sanitizeCandles)"],
+  "success_rate": {"backend": "N/A (VPS not tested)", "frontend": "unit-logic 100% (8/8), real-world outlier removal ~0% (3 outliers still visible)"},
+  "test_credentials": "Registered ephemeral VPS users via POST https://api.binaryfundglobal.com/api/auth/register (returns JWT immediately, no 2FA gate). Injected token into localStorage keys bfg_token / bfg_user to bypass login for /demo-trade.",
+  "seed_data_creation": "chartqa1785203322@example.com / chartqa2*@example.com (registered on VPS for auth bypass only)",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Preview URL: https://fullstack-deploy-72.preview.emergentagent.com. Backend is on VPS https://api.binaryfundglobal.com (DO NOT start local backend). To bypass login, register a fresh user via VPS /api/auth/register and inject token+user JSON into localStorage keys bfg_token & bfg_user, then navigate to /demo-trade. Use EUR/USD (OTC) with tf=60 to reproduce the outlier cluster — see 3 bars at ~1.128 in candle response with time in 1785196980-1785197100 range. Unit test file at /app/tests/test_sanitize_candles.mjs (node ...mjs to run).",
+  "rca of the issue": "The persisted candle store on the VPS (returned by GET /api/market/candles?symbol=EURUSD_OTC&tf=60) contains 3 legitimate-looking OHLC rows at ~1.128 while the rest of the 500-bar batch centers around 1.06635. These are ~5.8% off the median. The frontend sanitizeCandles filter uses a fixed +/-25% median band, which does not touch these bars. Result: the visual bug reported by the user (outlier candles floating far from the main price band) is still reproducible on /demo-trade after the fix. Reproduction: login (or inject JWT), open /demo-trade, select EUR/USD (OTC) 1m — 3 red candles visible near 1.128 timestamp range 1785196980-1785197100 (see screenshot). Mitigation options listed in action_items — tightening the threshold, using IQR/MAD, or (best) backend cleanup + tick-jump rejection on write."
+}

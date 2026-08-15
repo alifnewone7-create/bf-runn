@@ -1,0 +1,45 @@
+{
+  "summary": "Full E2E verification of Binary Fund Global after Socket.IO + msgpack migration. Backend (remote VPS at api.binaryfundglobal.com) verified via pytest (13/13 passed) covering health, socket.io polling handshake, auth (register/login/me/duplicate), market instruments+candles, wallet, trade place+settle+errors. Socket.IO live tick stream verified via python-socketio client with msgpack decode — received 9 binary ticks in 10s for subscribed EURUSD_OTC + depth/change snapshots. Symbol switch (subscribe event) confirmed to route ticks to newly-subscribed symbol. Frontend E2E via Playwright against the preview URL — login, /demo-trade renders live candlestick chart, Socket.IO connects over wss with binary frames, live prices update, symbol switch works, demo trade placed with $1, balance deducted, `trade_closed` event fires after 60s expiry → balance updated to won +$0.88 with toast, BrandLogo served from localStorage as data URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login (admin@binaryfundglobal.com)", "issue": "Provided admin password 'Iamhear@#12' returns 401 Invalid email or password. VPS reseeds admin password on each restart from /opt/bfg-backend/.env. Not blocking — testing done via freshly registered user."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "CORS from http://localhost:3000", "issue": "VPS backend CORS_ORIGINS whitelist rejects http://localhost:3000 (returns 400 'Disallowed CORS origin' on OPTIONS preflight). Local frontend on port 3000 cannot call the remote API directly. Testing had to use the preview URL https://fund-tracker-315.preview.emergentagent.com which IS whitelisted. Impact: if the user opens the app on http://localhost:3000 in a browser, all /api requests will fail. This may be intentional (production origins only) but worth confirming. Preview domain works fine.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_backend_remote.py",
+    "/app/backend/tests/test_socketio_stream.py",
+    "/app/backend/tests/test_socketio_switch.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: update /app/memory/test_credentials.md whenever admin password on VPS changes (VPS reseeds from /opt/bfg-backend/.env ADMIN_PASSWORD on restart).",
+    "OPTIONAL: confirm whether http://localhost:3000 should be allowed in VPS CORS_ORIGINS (it currently isn't). If yes, add it on the VPS. Preview URL fund-tracker-315.preview.emergentagent.com already works."
+  ],
+  "critical_code_review_comments": [
+    "DemoTrade.jsx line 47: token read once at module render time from localStorage into a top-level const; if user logs out & back in in same session, `authH` and Socket.IO auth={token} may still reference stale token because the effect only runs once ([] deps).",
+    "DemoTrade.jsx line 71: Socket.IO path is hardcoded '/api/socket.io/'. This is fine but not env-configurable if the ingress path changes.",
+    "BrandLogo.jsx: `decoding=\"sync\"` and lowercase `fetchpriority` attribute cause React 18 dev warnings on some setups; consider `fetchPriority` (camelCase) to avoid noise. Not blocking.",
+    "Login.jsx uses withCredentials:true which forces credentialed CORS — combined with restrictive CORS_ORIGINS on VPS, this is why localhost:3000 is blocked. Working as designed if preview URL is the only sanctioned origin."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_backend_remote.py (new pytest suite - 13 tests, all passing)",
+    "/app/backend/tests/test_socketio_stream.py (Socket.IO msgpack tick stream test)",
+    "/app/backend/tests/test_socketio_switch.py (subscribe event / symbol switching test)",
+    "/app/memory/test_credentials.md (recorded working freshly-registered test user + note about admin password reset behavior)"
+  ],
+  "success_rate": {"backend": "100% (13/13 pytest + 2/2 socket.io scripts)", "frontend": "100% (login, demo-trade page, socket.io, symbol switch, place-trade, settle, brand logo all verified)"},
+  "test_credentials": "Regular user (registered by testing agent): testagent_1784768084@example.com / TestAgent@1234. Admin creds provided in problem statement did NOT work (401).",
+  "seed_data_creation": "Registered a new demo trader on the remote VPS (testagent_1784768084@example.com) with initial demo balance $10,000 USD. Password stored in /app/memory/test_credentials.md.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "REMOTE-only backend at https://api.binaryfundglobal.com — do NOT start local backend. VPS CORS_ORIGINS allows the preview URL (https://fund-tracker-315.preview.emergentagent.com) but NOT http://localhost:3000, so run Playwright against the preview URL. Fresh test user was registered on 2026-07-23 (see /app/memory/test_credentials.md). Test suite runs via `pytest backend/tests/test_backend_remote.py -n 0 -v` (must pass `-n 0` because pytest.ini forces xdist parallel which triggers race conditions in the session-scoped register fixture). Socket.IO uses path='/api/socket.io/' with binary msgpack for `quotes/stream` and `depth/change`, JSON for `trade_closed`.",
+  "rca of the issue": "N/A — no bugs found. All migration paths (Socket.IO handshake 200, binary msgpack quotes stream, subscribe event, trade_closed event, chart tick updates, BrandLogo localStorage cache) verified working end-to-end."
+}

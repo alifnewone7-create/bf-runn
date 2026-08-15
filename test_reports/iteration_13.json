@@ -1,0 +1,34 @@
+{
+  "summary": "Backend-only testing of Google-user password reset bug fix + Google welcome email + registration flow on local replica (http://localhost:8001). Wrote /app/backend/tests/test_auth_google_reset.py with 12 tests covering: health, normal login regression, register (welcome + verification emails queued), forgot-password for Google-only user (BUG FIX — token created + 'queued' log line), full reset flow with known raw token (status=valid -> reset-password -> login with new password -> status=used), forgot-password for normal user (regression), forgot-password for unknown email (returns generic 200 + 'unknown email' log), _generate_strong_password unit (16-char alnum, upper+lower+digit), build_google_welcome_email (contains password, 'Google', brand), build_welcome_email verified flag (verified=True omits 'verification message we sent separately', verified=False includes it), single-green-rectangle email design (BG==CARD==#e3f4e9, no old card border, no white outer body across all 5 templates), and mocked-httpx google_auth new-user path (new user gets password_hash, google_sub, is_verified=True, exactly 2 send_email BackgroundTasks queued — google welcome + welcome — and NO verification email). All 12 tests PASSED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_google_reset.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth_routes.forgot_password now correctly issues reset tokens for Google-only users (password_hash IS NULL) — the fix is verified end-to-end.",
+    "google_auth new-user path correctly sets password_hash from _generate_strong_password() and queues exactly 2 emails (google-welcome + welcome verified=True); no verification email is queued for Google users — matches requirement.",
+    "emailer BG and CARD constants are both #e3f4e9 and no template contains the previous 'border:1px solid rgba(15,157,99,0.18)' card border — single-green-rectangle design confirmed across build_verification_email / build_welcome_email / build_google_welcome_email / build_reset_email.",
+    "Minor observation (not a bug): forgot-password commits token row before background email dispatch runs — safe. reset-password does not invalidate other outstanding reset tokens for the same user; if desired, mark other unused tokens as used_at=now on successful reset to prevent replay from prior links.",
+    "Observation: register() sends the welcome email BEFORE the verification email — welcome copy tells user 'we sent separately' so order in the inbox may be reversed; low priority."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_google_reset.py (created)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only per request)"},
+  "test_credentials": "selftest1@test.com / Passw0rd123 (from /app/memory/test_credentials.md). Google-only test users are created + torn down inside each test via psql.",
+  "seed_data_creation": "Each test creates its own ephemeral users (email prefixes: regtest_, gonly_, grst_, gauth_) via psql INSERT and deletes them + related profiles/wallets/password_reset_tokens in teardown. No production/seed data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test file at /app/backend/tests/test_auth_google_reset.py — reusable regression suite. Runs against http://localhost:8001 with local Postgres (bfg). Uses subprocess psql with sudo -u postgres. Log assertions read /var/log/supervisor/backend.err.log for 'Password reset email queued' / 'SMTP not configured' / 'unknown email' patterns. Google OAuth new-user path is exercised by monkey-patching httpx.AsyncClient inside auth_routes and calling google_auth() directly with a real DB session — no need for real Google credentials.",
+  "rca of the issue": "Original bug: forgot-password had `if user and user.password_hash:` gate, which silently skipped Google-only users (password_hash NULL). Fix (already applied in auth_routes.forgot_password) drops the password_hash check, so any existing user gets a reset token + email queued. Verified: token row is created in password_reset_tokens for a fresh google-only user and backend logs 'Password reset email queued for <email>'. Full reset flow using a manually-inserted known raw token (sha256 hashed in DB) succeeds — user can then log in with the newly set password."
+}

@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend-only verification of the new email-verification UX (VerifyEmail page + Profile verification badge + Resend button) plus regression on register/login/dashboard/demo-trade. All 5 requested flows PASS. Every XHR routes to the VPS (api.binaryfundglobal.com); zero calls to the preview host /api/*. The two new backend endpoints (POST /api/auth/verify-email, POST /api/auth/resend-verification) return 404 on the VPS as expected, and the UI handles both gracefully.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "verify_email_success_state": "PASS - /verify-email?status=success renders data-testid=verify-success with 'Email verified' heading and 'Go to dashboard' link (verify-go-dashboard).",
+    "verify_email_error_state": "PASS - /verify-email?status=error renders data-testid=verify-error with 'Verification failed' + 'invalid or has expired' message.",
+    "verify_email_no_token": "PASS - /verify-email (no query params) renders data-testid=verify-error with 'Verification token is missing from the link.'",
+    "verify_email_invalid_token": "PASS - /verify-email?token=someInvalidToken123 issues POST to https://api.binaryfundglobal.com/api/auth/verify-email, receives 404, and settles into the error state with backend detail 'Not Found'. No hanging spinner.",
+    "profile_page_unverified": "PASS - Logged in as qa.crosshair@bfgtest.com. Profile shows data-testid=profile-email='qa.crosshair@bfgtest.com', data-testid=email-unverified-badge visible, data-testid=email-verified-badge NOT visible, data-testid=resend-verification-btn visible.",
+    "resend_button_graceful_failure": "PASS - Clicking resend-verification-btn calls POST /api/auth/resend-verification on VPS (404). Button re-enables afterwards (not stuck on 'Sending…'), page does not crash. Note: toast text was not captured by DOM query at final moment, but the destructive toast is fired in code (line 66 Profile.jsx) and observed console shows the 404 was handled by the catch branch.",
+    "registration_regression": "PASS - Registered qa.mailtest+<rand>@bfgtest.com / TestPass123! via /registration with country Bangladesh and terms checkbox. Redirected to /demo-trade successfully. No unhandled error.",
+    "login_regression": "PASS - Login with qa.crosshair@bfgtest.com / TestPass123! redirects to /demo-trade.",
+    "dashboard_regression": "PASS - /dashboard loads (HTML 441KB).",
+    "demo_trade_regression": "PASS - /demo-trade loads with chart, portfolio, wallet $500.82.",
+    "xhr_host_check": "PASS - 41 XHRs to /api endpoints across the session, 0 calls to preview-host /api/*, 0 non-VPS /api calls. All go to https://api.binaryfundglobal.com."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Profile.jsx resendVerification() toast on error uses e?.response?.data?.detail; on 404 this can render 'Not Found' verbatim to the user. Consider mapping 404 -> a friendlier 'Verification is temporarily unavailable, please try again later.' once the backend is deployed to the VPS.",
+    "VerifyEmail.jsx same concern: on the invalid-token path the error card currently shows the raw backend detail 'Not Found'. A friendlier fallback message would improve UX when the endpoint is 404.",
+    "No user-facing indication after a successful registration that a welcome/verify email is on its way - once the SMTP backend is deployed on the VPS, adding a post-register toast or banner would close the loop."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "Trader (unverified): qa.crosshair@bfgtest.com / TestPass123! - verified working.",
+  "seed_data_creation": "Created one throwaway user during registration regression (email pattern qa.mailtest+<random>@bfgtest.com) on the VPS DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Preview host = https://binary-fund-run.preview.emergentagent.com, API base = https://api.binaryfundglobal.com (VPS). Email verification endpoints /api/auth/verify-email and /api/auth/resend-verification are NOT deployed on the VPS yet - they currently 404 and the frontend handles this gracefully. When the VPS deploys emailer.py + the new auth routes, retest: (1) real token from an actual welcome email -> success state, (2) resend button showing success toast + email delivery, (3) is_verified flipping to true on Profile after clicking the verify link."
+}

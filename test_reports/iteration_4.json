@@ -1,0 +1,42 @@
+{
+  "summary": "Frontend-only verification of the Google client_id crash fix on /login and /registration. Confirmed both pages render without any 'Missing required parameter client_id' runtime overlay and Google button is rendered but DISABLED (opacity-50, disabled attribute) via GoogleButtonDisabled component when REACT_APP_GOOGLE_CLIENT_ID is empty. Email/password login/register flows could NOT be end-to-end tested because the backend is DOWN (Postgres at 127.0.0.1:5432 not running, so /api/health returns 502 and uvicorn startup fails with ConnectionRefusedError).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/*", "issue": "Backend uvicorn cannot start – asyncpg ConnectionRefusedError to 127.0.0.1:5432. PostgreSQL is not installed/running in the pod (no postgres binary, /var/run/postgresql missing, dpkg has no postgresql package). All API calls (login, register, health, market) return 502 through preview URL.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Email/Password Login", "issue": "Login submit shows 'Login failed - The origin web server returned an invalid or incomplete response to Cloudflare' toast because backend is 502 (root cause = Postgres not running, not a frontend bug)", "affected_selectors": ["form submit button", "'Login failed' toast"]},
+      {"flow": "Email/Password Registration", "issue": "Not tested end-to-end (blocked by backend outage); registration form itself renders correctly with country, email, password, TOS checkbox, and disabled Google button."}
+    ],
+    "design_issues": []
+  },
+  "verified_fixes": [
+    "/login: NO runtime error overlay, NO 'Missing required parameter client_id' text on page.",
+    "/registration: NO runtime error overlay, NO client_id error text.",
+    "Login Google button: <button data-testid='login-google-button' disabled title='Google login is not configured' class='...opacity-50 cursor-not-allowed'> – confirmed via DOM query.",
+    "Registration Google button: rendered visually disabled (grey, not clickable) with same GoogleButtonDisabled component.",
+    "No pageerrors captured on either page during load."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "CRITICAL: Restore/install PostgreSQL 5432 and Redis 6379 inside this pod (or point DATABASE_URL/REDIS_URL to a reachable instance). Backend uvicorn is currently crash-looping with 'ConnectionRefusedError: Connect call failed (127.0.0.1, 5432)'. See /var/log/supervisor/backend.err.log. Until this is fixed the login/register E2E cannot be validated.",
+    "Minor: Registration Google button testid was not directly queried; recommend confirming its data-testid (likely 'register-google-button') matches the plan – but it is visually disabled as expected."
+  ],
+  "critical_code_review_comments": [
+    "App uses PostgreSQL + Redis but the Emergent pod doesn't ship those services by default (supervisor only runs backend/frontend/mongodb). The repo needs an in-pod install script or supervisor entries for postgres/redis, otherwise the backend cannot run in this environment.",
+    "GoogleButton.jsx correctly guards useGoogleLogin behind GOOGLE_CLIENT_ID check – good defensive pattern.",
+    "frontend/.env exposes REACT_APP_GOOGLE_CLIENT_ID='' (blank) – acceptable; disabled state works as intended."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "0% (service down)", "frontend": "bug-fix verified: /login & /registration render OK with disabled Google button"},
+  "test_credentials": "admin@binaryfundglobal.com / Iamhear@#12 (from /app/memory/test_credentials.md) – could not be validated because backend is 502.",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Frontend Google client_id crash fix is confirmed working. The remaining test items (email/password login as admin, new user registration, authenticated dashboard load) are BLOCKED by backend outage: Postgres 5432 not running in pod. Next agent: after main agent restores Postgres/Redis, re-run login with admin@binaryfundglobal.com / Iamhear@#12 and verify redirect to authenticated dashboard, then register a new TEST_ user to verify $10k demo wallet.",
+  "rca of the issue": "Root cause of login E2E failure: PostgreSQL server absent in pod → asyncpg ConnectionRefusedError on backend startup → uvicorn exits → k8s ingress returns 502 → frontend shows generic 'Login failed / Cloudflare invalid response' toast. Reproduction: `curl http://127.0.0.1:8001/api/health` → connection refused; `sudo supervisorctl restart backend` → err.log shows Postgres connect fail. Mitigation: install & start postgres (bfg_admin/bfg_local_pw/binaryfund) + redis; run /app/backend/seed.py to seed admin + 28 instruments."
+}

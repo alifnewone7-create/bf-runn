@@ -1,0 +1,19 @@
+{
+  "summary": "Verified user-reported production bug ('2FA code page not appearing after VPS deploy') is FIXED end-to-end. Backend (LIVE VPS https://api.binaryfundglobal.com): 3/3 pytest checks passed — POST /api/auth/login returns {requires_2fa:true, pending_token, email:'b***********e@test.com'} and NO token; POST /api/auth/2fa/verify with 000000 returns 400 'Invalid authentication code. Please try again.'; POST /api/auth/2fa/resend immediately after login returns 429 throttle. Frontend E2E (preview https://fullstack-deploy-72.preview.emergentagent.com pointing at VPS backend via REACT_APP_API_BASE): logging in with bfg.2fa.probe@test.com / Probe2FA123 now navigates to twofa-page with 'Welcome back!' heading, masked hint b***********e@test.com, 6 code boxes, Sign-in disabled until 6 digits, Resend countdown (30s), Go back button. Wrong code 000000 -> red 'Invalid authentication code. Please try again.' error and boxes auto-clear. Go back returns to login form. Mobile 390x844: 2FA page renders with docW==winW==390, no horizontal overflow. Happy path (correct code) was intentionally NOT tested — probe mailbox is fake and out of scope per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_vps_2fa_prod.py",
+    "/app/test_reports/pytest/vps_2fa_prod.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": ["/app/backend/tests/test_vps_2fa_prod.py (new)"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% (all acceptance checks: desktop 2FA page, wrong code error + auto-clear, go back, mobile no-overflow)"},
+  "test_credentials": "bfg.2fa.probe@test.com / Probe2FA123 (VPS Postgres, 2FA ON, fake mailbox — happy path not testable)",
+  "seed_data_creation": "None; used existing VPS probe user.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The preview frontend at fullstack-deploy-72.preview.emergentagent.com is wired to the LIVE VPS backend via /app/frontend/.env REACT_APP_API_BASE=https://api.binaryfundglobal.com — do NOT change this. Probe user bfg.2fa.probe@test.com sends a real (undeliverable) email to Hostinger on every login/resend, so keep 2FA test runs minimal. Each login consumes rate-limit budget on VPS resend endpoint (30s throttle). Playwright typing all 6 digits into box 0 with keyboard.type auto-advances correctly. On wrong code the component auto-clears input boxes (confirmed).",
+  "rca of the issue": "Original bug: user reported that after deploying backend to VPS, the 2FA code page did not appear at login. Root cause (per problem statement) was a stale deploy script that didn't ship the new /api/auth/2fa/* endpoints, so /api/auth/login returned a direct token instead of {requires_2fa, pending_token}, and the frontend proceeded straight into the app instead of rendering the Two-Step Verification page. Mitigation: user re-deployed with the correct build; endpoints are now live on VPS and this testing run verifies both the API contract and the UI flow behave as designed. No further action required."
+}

@@ -1,0 +1,38 @@
+{
+  "summary": "Static/simulation testing of /app/backend/deploy/vps_deploy_bundle.sh — the base64-embedded self-contained VPS deploy script. Ran 7 pytest cases covering: bash -n syntax, full script execution under a scratch APP_DIR with systemctl/chown/curl shimmed to no-ops, file presence + non-empty check for all 7 target files, Python AST parse for each extracted file, byte-identical round-trip vs /app/backend originals, backup dir creation when prior files exist, and fresh-install branch tolerance when prior files are absent. ALL 7 TESTS PASSED (100%). The user's reported 'no such file or directory' issue was NOT reproduced — the current vps_deploy_bundle.sh runs cleanly in both fresh and upgrade scenarios.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_vps_deploy_bundle.py",
+    "/app/test_reports/pytest/vps_deploy_bundle.xml"
+  ],
+  "action_items": [
+    "None from testing side. User's 'no such file' error was almost certainly from the deprecated /tmp/deploy_session3.sh (rsync-from-local) being run inside the VPS. The current /app/backend/deploy/vps_deploy_bundle.sh works correctly. Instruct user explicitly: `wget/scp /app/backend/deploy/vps_deploy_bundle.sh onto the VPS, then run: sudo bash vps_deploy_bundle.sh` — no need for any local files at the VPS side.",
+    "OPTIONAL hardening: the script's health-check tail (`curl -sS http://127.0.0.1:8001/api/health`) has no `|| true`, so if the service comes up slowly it could fail the whole script under `set -e`. Consider `curl -sS ... || true` for robustness."
+  ],
+  "critical_code_review_comments": [
+    "Script is 1017 lines and self-contained; that's expected given the base64 payloads. No refactor needed.",
+    "`set -euo pipefail` is used consistently; base64 heredocs are quoted ('B64EOF') so no shell expansion occurs inside payloads — safe.",
+    "The backup loop `[ -f \"$f\" ] && cp \"$f\" \".backup_$STAMP/$f\" || true` correctly guards against missing prior files (verified by test_bundle_tolerates_missing_prior_files).",
+    "curl health-check lines 1006-1007 lack `|| true` guard while `set -e` is active — if bfg-backend is slow to start post-restart, script would exit non-zero after all files are already written. Non-blocking but worth a one-line hardening."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_vps_deploy_bundle.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 pytest)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "None. Test creates scratch temp dirs under /tmp and cleans them up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The bundle script /app/backend/deploy/vps_deploy_bundle.sh is verified byte-identical to /app/backend sources for market.py, models.py, seed.py, routes/{market_routes,auth_routes,trade_routes,sio_hub}.py. If any of those 7 files change in /app/backend, the bundle must be regenerated and this test suite (/app/backend/tests/test_vps_deploy_bundle.py) re-run to catch drift. Test uses PATH-prepended stub dir to shim systemctl/chown/curl — pattern is reusable for future deploy-script tests.",
+  "rca of the issue": "User complaint: `bash /tmp/deploy_session3.sh dawar poreo and vps a file ta thakar poreo no such a file dekhacche` — the previous /tmp/deploy_session3.sh was an rsync-from-local script that referenced $LOCAL_APP_DIR (path on developer machine); running it inside the VPS made rsync look for files that only exist on the developer machine → 'No such file or directory'. Fix already applied by main agent: replaced with /app/backend/deploy/vps_deploy_bundle.sh which is fully self-contained via base64 embeds and needs no local files on the VPS. Verified by simulating the run in a scratch dir — no such error surfaces, all 7 files land byte-identical to /app/backend sources and parse as valid Python."
+}

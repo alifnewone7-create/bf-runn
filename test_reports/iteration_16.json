@@ -1,0 +1,34 @@
+{
+  "summary": "Full E2E testing of the new Two-Step Verification (email OTP) feature — backend (pytest, 8/8 passing) + frontend (Playwright, 3 viewports/flows). Every acceptance rule from the review request was verified end-to-end against the preview URL: (1) register auto-enables 2FA and returns JWT directly; (2) email+password login with 2FA ON returns {requires_2fa, pending_token, masked email} and NO token; the 6-digit code is written to backend.err.log with prefix '2FA code (dev, SMTP off) for <email> [login|toggle]'; (3) /api/auth/2fa/verify — wrong code -> 400 'Invalid authentication code', right code -> {user, token} + auth cookie; re-using consumed code -> 400; >5 wrong attempts on same code -> 429; (4) /api/auth/2fa/resend — immediately after login-issued code is throttled 429; after 31s a fresh resend succeeds and the very next one is throttled again; (5) /api/auth/2fa/request-toggle + /api/auth/2fa/confirm-toggle flips two_fa_enabled; after OFF a subsequent login returns token directly (no requires_2fa); after re-enable, login again requires code. UI: /login shows twofa-page with masked email hint, Sign-in disabled until 6 digits, wrong code renders twofa-error, Resend has countdown, Go back returns to login form; correct code redirects to /demo-trade. /profile shows twofa-section with status ON badge, opening the dialog and confirming toggle code flips to twofa-status-off with 'Two-step verification is ON/OFF' toast, and can be re-enabled the same way. Mobile 390x844: 2FA login page fits with no horizontal overflow (boxes width 308px).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Profile > Two-Step toggle dialog", "issues": ["shadcn Dialog background appears semi-transparent so the underlying Personal Details section text bleeds through the dialog title/description — reduce dialog overlay opacity or set solid bg on DialogContent for readability. Non-blocking."]},
+      {"screen": "Profile > Personal details", "issues": ["Date of birth uses the browser's native date input (mm/dd/yyyy) rather than the shadcn calendar picker used elsewhere — cosmetic consistency issue, unrelated to 2FA feature."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_two_fa.py",
+    "/app/test_reports/pytest/two_fa.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth_routes._consume_2fa_code: on the 6th attempt it marks used_at BEFORE checking the code hash — semantically correct (locks the code) and matches the 429 behavior tested, but note the message says 'Too many wrong attempts' even if the 6th happens to be correct. Acceptable trade-off.",
+    "TwoFACodeInput handleChange only appends digits — pasting via keyboard.type('123456') into box 0 works because each keystroke fires onChange and auto-advances. But there is no way to CLEAR/RESET the boxes from the UI other than Backspace; if a wrong code was entered, users must backspace 6x. Consider clearing the value on error automatically (nice-to-have).",
+    "Backend logs a plaintext 6-digit code when SMTP is off (dev convenience). Ensure smtp_configured() returns True in prod — currently guarded by 'if not smtp_configured()' which is correct, just a reminder for VPS deploy.",
+    "/api/auth/2fa/resend uses the latest un-used code's created_at for the 30s throttle. If a user's login-issued code is consumed successfully but then they somehow get back to the resend endpoint with the same pending_token (edge case), 'latest' returns None so resend would immediately issue a new code with no throttle — pending_token is single-use in practice via the /verify path, so low risk.",
+    "TwoFASection dialog: DialogContent lacks an explicit opaque background under the semi-transparent overlay, leading to the design issue noted above."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_two_fa.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all flows: login-2fa happy path, wrong code, go-back, toggle off, direct login after off, toggle back on, mobile viewport)"},
+  "test_credentials": "twofa1@test.com / Passw0rd123 (used and left in ON state at end of test). Also creates fresh ephemeral users twofa_reg_* and twofa_toggle_* per run (not cleaned up — see context).",
+  "seed_data_creation": "New random users per test class in TestRegistration and TestToggleFlow (twofa_reg_<hex>@test.com, twofa_toggle_<hex>@test.com). No cleanup implemented — DB will accrue a handful of TEST users per pytest run; acceptable in the local dev DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The 2FA suite reads 6-digit codes from /var/log/supervisor/backend.err.log via `grep -a '2FA code (dev' ...` — the log grep will pick up ALL historical codes, so always use `tail -1` (helper does this). Resend throttle test intentionally sleeps 31s so total pytest time ~33s. If backend restarts the .err.log is truncated and grep may need `-a`. UI toggle dialog uses testids `profile-twofa-code-input-0..5` and confirm button `profile-twofa-confirm`. To clear the code boxes you must press Backspace per digit (there is no keyboard-select workaround). twofa1@test.com is left with 2FA ON at end of run.",
+  "rca of the issue": "N/A — no bugs found. Feature works as specified."
+}

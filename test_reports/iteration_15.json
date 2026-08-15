@@ -1,0 +1,29 @@
+{
+  "summary": "Backend-only testing of the auth_provider bug fix (Bengali user report). Wrote /app/backend/tests/test_auth_provider_fix.py with 8 pytest tests covering: (a) MAIN BUG — password-registered UNVERIFIED user + Google link does NOT auto-verify and keeps auth_provider='password', with 0 emails queued; (b) verification email still works after Google link; (c) first-time Google user auto-verifies with auth_provider='google', gets 2 emails (login details + welcome), no verify email; (d) admin /stats, /users list and /users/{id} detail all report ORIGINAL auth_provider; (e) apply_profile_migrations idempotent backfill correctly labels legacy google-only vs password rows; (f) regression: register + login for selftest2@test.com still work. Also updated /app/backend/tests/test_deploy_email_script.py to expect the 5th embedded file (routes/admin_routes.py) and to use selftest2@test.com. All 8 new + 12 deploy tests pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_auth_provider_fix.py",
+    "/app/backend/tests/test_deploy_email_script.py",
+    "/app/test_reports/pytest/auth_provider_fix.xml",
+    "/app/test_reports/pytest/deploy_email_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth_routes.google_auth existing-user branch correctly no longer touches user.is_verified — verified by test.",
+    "admin_routes.py user list/detail defensively fall back to 'password' when auth_provider IS NULL (u.auth_provider or 'password'). Good, but admin_stats.google_users counts strictly auth_provider='google'; a legacy row with google_sub set but auth_provider still NULL (i.e. before migration ran) would be under-counted. The idempotent migration in seed.run_seeds mitigates this at startup — confirmed by test_migration_backfill.",
+    "test_auth_google_reset.py references selftest1@test.com which no longer exists in the freshly-recreated local DB — 3 tests there will fail if run. Not fixed here (out of scope; main agent may want to switch it to selftest2 or seed selftest1).",
+    "google_auth() new-user path uses is_verified=bool(info.get('email_verified', True)) — defaults to True when Google omits the flag; acceptable per current spec, but note the divergence from the strict 'trust only what Google says' interpretation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deploy_email_script.py",
+    "/app/backend/tests/test_auth_provider_fix.py (new)"
+  ],
+  "success_rate": {"backend": "100% (20/20 across 2 suites)", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "selftest2@test.com / Passw0rd123 (only pre-existing user). Admin seeded on-the-fly by test fixture as admintest@test.com / AdminPw123! via psql (bcrypt via backend.auth.hash_password) — left in DB for future reuse.",
+  "seed_data_creation": "Module-scoped fixture inserts admintest@test.com (role=admin, auth_provider=password) via psql if absent. All per-test users are cleaned up.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New test file: /app/backend/tests/test_auth_provider_fix.py. It uses asyncio.run() multiple times per test — SQLAlchemy async engine leaks connections across event loops, so each async block calls `await engine.dispose()` before opening SessionLocal — preserve this pattern. Admin user admintest@test.com / AdminPw123! is left seeded. test_auth_google_reset.py in the repo still references selftest1@test.com which was wiped this session; expect 3 failures there until either the file is updated or selftest1 is re-seeded.",
+  "rca of the issue": "Prior bug: existing-user branch in google_auth() set user.is_verified=True unconditionally, and admin panel derived provider from `google_sub IS NOT NULL`, so a password-registered user who later signed in with Google appeared as auto-verified 'google' user. Fix (verified end-to-end by test_password_user_google_link_does_not_auto_verify and test_admin_stats_and_user_list_show_original_provider): (1) existing-user branch only links google_sub + last_login_at, does not touch is_verified; (2) new User.auth_provider column stamped at signup ('password' on /register, 'google' on new-user google_auth), read back by admin endpoints; (3) apply_profile_migrations idempotently backfills legacy rows on startup."
+}

@@ -1,0 +1,53 @@
+{
+  "summary": "Verified the entry/exit price patch statically + unit-level for the backend (VPS not yet patched, local backend intentionally down) and end-to-end frontend behaviour against the unpatched VPS. All 17 pytest checks pass. Frontend still emits clientTickT and never renders two dots for a single trade (fan-apart eliminated). On the UNPATCHED VPS the confirmed entry_price is still 1 tick off the tick the client saw, so the on-chart entry dot still makes a single ~1.17px discontinuous step at the optimistic->confirmed swap (t~=260ms). This is the exact residual the user's patch is designed to remove; the frontend side of the fix is in place, and the moment /app/backend/deploy/patch_trade_price.sh is run on the VPS this residual will disappear. Crosshair regression clean (solid 1px, exact tracking, all live overlays render).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "passing_checks": [
+    "BACKEND STATIC: py_compile market.py, routes/trade_routes.py, routes/ws_routes.py all OK. bash -n on deploy/patch_trade_price.sh OK.",
+    "BACKEND UNIT (17 pytest cases in /app/backend/tests/test_price_at_and_patch.py): Engine.price_at returns exact tick at ts, last-<=-ts between ticks, current price when ts>=latest, earliest when ts before history, current on invalid/None ts, None on unknown symbol. Entry-price window (wall-3.0 <= ts <= wall+0.5) is what trade_routes.place_trade_core actually enforces (verified from source markers). _settle_one uses engine.price_at(order.symbol, order.expiry_at.timestamp()) and settle_loop sleeps 0.1s (asserted directly on the source).",
+    "PATCH INTEGRITY: patch_trade_price.sh embeds base64 blobs for exactly {market.py, routes/trade_routes.py, routes/ws_routes.py}. Each embedded blob decodes to bytes IDENTICAL to the current /app copy (byte-for-byte equality tested). No stray files. bash -n passes.",
+    "FRONTEND clientTickT: DemoTrade.jsx placeTrade builds placePayload with clientTickT: liveTick ? liveTick.t : undefined. Placing a trade against the unpatched VPS did NOT crash and the trade opened normally (confirmed OPEN trade: id=8e2f604a..., entry_price=1.09381, duration=60, status=open). Balance debited $500 -> $499 optimistically, matching the badge.",
+    "SINGLE-DOT-AT-A-TIME: sampled the chart every 40ms for 1600ms after a HIGHER click. MAX_CONCURRENT_DOTS=1 across all 40 samples, SAMPLES_WITH_>1_DOT=0. The optimistic placeholder is stripped in the same setOpenTrades update that inserts the server-confirmed trade (verified live). No 6px fan-apart anymore.",
+    "CROSSHAIR REGRESSION: crosshair-vert getComputedStyle.backgroundImage='none', width=1px; crosshair-horz backgroundImage='none', height=1px -> solid 1px lines (no repeating-linear-gradient). Moved pointer to (760,420) -> crosshair-vert.x=760, crosshair-horz.y=420 (0px offset).",
+    "LIVE OVERLAYS: live-price-line, live-vert-line-top, live-vert-line-bottom, live-price-tag, candle-countdown all visible and non-hidden after trade placement and crosshair motion."
+  ],
+  "residual_observed_on_unpatched_vps": {
+    "entry_dot_jump_px": 1.17,
+    "detail": "Optimistic dot y stayed at 469.77 for samples 40-240ms. Confirmed dot appeared at 280ms at y=470.94 -> a single 1.17px discontinuous vertical step exactly at the swap. The chart's price scale did NOT rescale in that window (live-price-line y drifted continuously 473.27 -> 474.07 in the same window). Root cause: unpatched VPS ignores clientTickT and stamps entry_price at engine.price(symbol) after the tick advanced by one increment (entry_price=1.09381 while the optimistic price = the last tick the browser rendered, ~1.09380). This is exactly what the user's patch fixes; once /app/backend/deploy/patch_trade_price.sh is executed on the VPS, entry_price will equal engine.price_at(clientTickT) and this 1.17px residual disappears.",
+    "expected_after_patch": "delta between optimistic and confirmed dot y at the swap -> 0 (both come from the same tick's price)."
+  },
+  "could_not_verify_end_to_end": [
+    "Trade expiry -> trade-result-dot / TradeResultCard timing: the duration picker only exposes testids duration-mode-timer / duration-mode-time; there is no data-testid on individual duration options (5s/10s/etc.), so the test could not shorten the trade below the default 60s within the automation window. The 60s trade was still open at test end. Recommendation for main agent: add data-testid=\"duration-option-5\" (and 10/15/30/60) to the duration picker items so this is directly testable.",
+    "Backend-side entry_price==optimistic_entry_price parity and settlement-uses-price-at-expiry semantics against a running server: local backend is intentionally stopped (no Postgres) and the VPS is not yet patched. All three files are verified statically + by unit-level Engine tests; full end-to-end is on the user after they run the patch script."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_price_at_and_patch.py",
+    "/app/test_reports/pytest/pytest_iter44.xml",
+    "/app/test_reports/iter44_after.png"
+  ],
+  "action_items": [
+    "USER: run /app/backend/deploy/patch_trade_price.sh on the VPS (as root at /opt/bfg-backend) to eliminate the residual 1-tick entry-price drift and the up-to-1s late settlement.",
+    "MAIN AGENT: add data-testid to individual duration options in the duration picker (e.g. duration-option-5, duration-option-10, ...). Currently only the mode toggles (timer/time) and the picker button have testids, which blocks automated verification of the 5s trade -> result card flow."
+  ],
+  "critical_code_review_comments": [
+    "Engine.price_at correctly handles empty ticks deque (returns current price), invalid ts (TypeError/ValueError -> current price), and future ts (>= last tick t -> current price). The reversed-linear scan is O(n) but fine because ticks is a bounded deque(maxlen=400000) and the loop breaks on the first t<=ts.",
+    "trade_routes.place_trade_core window (wall-3.0 <= ts <= wall+0.5) is deliberately asymmetric to accept mild client-clock skew forward (0.5s) and network delay backward (3s). Combined with engine tick_all cadence of 0.25s this yields a comfortable margin without ever accepting a truly stale tick.",
+    "ws_routes._settle_one selects orders via `Order.expiry_at <= now` and then uses engine.price_at(order.symbol, order.expiry_at.timestamp()) so even if the loop runs 100-900ms late, the exit price is the tick at (or immediately before) the expiry instant -> the win/loss verdict cannot flip because of post-expiry ticks. Correct.",
+    "settle_loop asyncio.sleep(0.1) delivers <=100ms latency between expiry and s_orders/close in the common case, which matches the 'result card appears immediately' UX goal.",
+    "DemoTrade.jsx s_orders/open handler now strips the optimistic placeholder in the SAME setOpenTrades transition -- fully eliminates the transient duplicate observed in earlier iterations. Verified live: 0 samples with >1 dot for the trade during the 1.6s swap window.",
+    "Nit: patch_trade_price.sh uses `systemctl restart bfg-backend || service bfg-backend restart || true`. The `|| true` masks a real failure to restart. Consider dropping the `|| true` after the fallback so the operator sees a non-zero exit if BOTH restart methods fail."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_price_at_and_patch.py (new)"
+  ],
+  "success_rate": {
+    "backend": "17/17 static+unit pytest pass (100%). End-to-end against a running server: not attempted (VPS unpatched, local backend intentionally stopped).",
+    "frontend": "6/6 measurable checks pass (clientTickT sent, single dot, crosshair solid+tracking, overlays present, balance debited, badge with countdown). Residual 1.17px entry-dot jump on the UNPATCHED VPS is the exact server-side bug the patch script fixes -- not a frontend defect."
+  },
+  "test_credentials": "Fresh QA account minted for this run: qa.cross44b.gfmank@example.com / QaCross#2026x (VPS register endpoint returned 200 with token, no 2FA on the fresh account's first-login flow because register issues the access token directly). Token injected via localStorage.bfg_token.",
+  "seed_data_creation": "One demo account + one open 60s trade (id=8e2f604a-...-cc213301 on EURUSD_OTC, higher, $1, entry 1.09381) that will settle on the VPS ~60s after test end.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "After the user runs patch_trade_price.sh on the VPS: re-run the 40-sample chart snapshot in this iteration's Playwright script. The measurable pass criterion is: for every sample where dots.length==1, dot.y stays within +/-0.5px of the FIRST post-swap dot.y (i.e. the optimistic->confirmed swap introduces zero step). Also assert VPS /api/trade/open trade.entry_price equals the lastTick.price captured in the browser at click-time (fetch lastTick via a small window bridge like window.__lastTick = ...). For settlement correctness, add data-testids to duration options so 5s trades can be automated end-to-end; then measure (result-card-appearance-time - trade.expiry_time) <= 300ms. Bug NEEDS RETEST after VPS patch.",
+  "rca of the issue": "Two root causes, both server-side, both addressed by /app/backend/deploy/patch_trade_price.sh: (1) place_trade previously stamped entry_price at engine.price(symbol), which is the tick AFTER the one the browser last rendered because engine.tick_all runs every 250ms while socket delivery + click handling adds latency -> a 1-tick drift -> the on-chart entry dot moved by ~one price digit's worth of pixels (~1-2px) at the optimistic->confirmed swap. Fix: the frontend now sends clientTickT (timestamp of the tick it saw), and the server reads engine.price_at(sym, ts) so the confirmed entry_price is identical to the optimistic one. (2) settle_loop used engine.price(symbol) (=current price) and slept 1s, so if the loop ran 300-1000ms after expiry and adverse ticks arrived in that window, a winning trade could settle as a loss. Fix: engine.price_at(sym, expiry_at.timestamp()) reads the tick at the expiry instant regardless of when the settle loop runs, and the sleep is dropped to 100ms so the client sees the result within ~100ms of expiry. Verified statically + unit-tested; end-to-end verification is on the user post-patch."
+}

@@ -1,0 +1,62 @@
+{
+  "summary": "Frontend-only verification of (a) new admin portal at /bfg-control-center-portal, (b) refactor of API base into src/lib/apiBase.js, (c) demo-trade chart crosshair follow-pointer fix, and (d) UP-button trade placement regression. All 5 requested checks PASS on the preview URL against the VPS backend api.binaryfundglobal.com. No local backend was touched.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      { "screen": "Global (React dev warning)", "issues": ["Console warning: Invalid DOM property `fetchpriority` — should be `fetchPriority`. Non-blocking but appears on every route load."] }
+    ]
+  },
+  "test_report_links": [
+    "/app/.screenshots/admin_login.png",
+    "/app/.screenshots/crosshair_25pct.jpg",
+    "/app/.screenshots/crosshair_55pct.jpg",
+    "/app/.screenshots/crosshair_85pct.jpg",
+    "/app/.screenshots/after_up.jpg"
+  ],
+  "action_items": [
+    "(Optional) Rename the `fetchpriority` prop to `fetchPriority` wherever it is used in JSX to silence the React dev warning."
+  ],
+  "critical_code_review_comments": [
+    "apiBase.js correctly prefers REACT_APP_API_BASE over REACT_APP_BACKEND_URL — verified 0 XHR calls to preview host during login + demo-trade flow.",
+    "AdminPortal error handling is robust: `errText()` unwraps FastAPI detail arrays, spinner clears in `finally`, token is only stored on success (localStorage bfg_admin_token). Handles the current 404 from the un-deployed VPS admin API gracefully.",
+    "TradeChart crosshair now uses mode:0 (Normal) with vertLine/horzLine style:0 (Solid) — matches the fix intent, confirmed visually.",
+    "Minor: React fetchpriority prop casing warning (non-blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped per request)", "frontend": "100% (5/5 checks passed)" },
+  "test_credentials": "Trader: qa.crosshair@bfgtest.com / TestPass123! (works). Admin: none provided, VPS admin API returns 404 (expected — not yet deployed).",
+  "seed_data_creation": "None. A single $1 demo trade was placed on qa.crosshair account (balance 500 -> 499).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Once the admin backend is deployed to the VPS, re-test the authenticated admin flow: stats grid, users table, search, pagination, user drawer, logout — all data-testids are already in place in /app/frontend/src/pages/AdminPortal.jsx. Use ADMIN_EMAIL/ADMIN_PASSWORD from the VPS .env then. The admin API calls hit /api/admin/login, /api/admin/stats, /api/admin/users, /api/admin/users/{id}.",
+  "verification_evidence": {
+    "admin_portal": {
+      "url": "https://binary-fund-run.preview.emergentagent.com/bfg-control-center-portal",
+      "admin_login_form_visible": true,
+      "email_password_submit_visible": true,
+      "submit_with_bad_creds_shows_error": "'Not Found' rendered in [data-testid=admin-login-error]",
+      "token_stored_after_failed_login": false,
+      "spinner_cleared_after_error": true,
+      "console_crash": false
+    },
+    "api_routing": {
+      "hosts_observed_during_full_flow": ["api.binaryfundglobal.com"],
+      "preview_host_api_calls": 0
+    },
+    "crosshair_follow_pointer": {
+      "y25pct_label": "1.09190",
+      "y55pct_label": "1.07180",
+      "y85pct_label": "1.05171",
+      "distinct_values": true,
+      "lines_solid": true
+    },
+    "trade_placement": {
+      "balance_before": "$500.00",
+      "balance_after": "$499.00",
+      "trade_marker_visible_on_chart": true,
+      "trades_counter": 1
+    }
+  }
+}

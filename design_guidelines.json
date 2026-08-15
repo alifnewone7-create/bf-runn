@@ -1,0 +1,88 @@
+{
+  "project_name": "Binary Fund Global",
+  "theme_strategy": "The Performance Pro mixed with Luxury. Dark-first, professional Quotex-style layout. Deep forest/obsidian backgrounds, glowing green accents, glassmorphism overlays for high-stakes trading clarity.",
+  "typography": {
+    "headings": {
+      "font": "Manrope",
+      "rules": "Use for all structural headings (Header logo text, panel titles like 'Investment', 'Duration', modal titles). Must have tight tracking (`tracking-tight`) to feel sharp and technical. Weights: primarily `font-semibold` or `font-bold`."
+    },
+    "body": {
+      "font": "Inter",
+      "rules": "Use for all numerical data, balances, countdowns, payouts, and chart labels. Enable tabular numerals (`tabular-nums` class) to stop numbers from jumping. Weights: `font-medium` for default text, `font-bold` for critical values (Profit/Loss)."
+    },
+    "scales": {
+      "H1": "text-xl md:text-2xl (Dense UI, keep sizes compact)",
+      "H2": "text-lg md:text-xl",
+      "body": "text-sm",
+      "small_data": "text-xs tracking-wide uppercase text-muted-foreground"
+    }
+  },
+  "colors": {
+    "backgrounds": {
+      "base": "#040D09",
+      "panel": "#06120d",
+      "surface": "#08150f"
+    },
+    "brand": {
+      "primary": "#14b877",
+      "danger": "#f43f5e",
+      "warning": "#eab308"
+    },
+    "text": {
+      "primary": "#ffffff",
+      "secondary": "#94a3b8",
+      "muted": "#475569"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Use heavily on floating overlays (Account Switcher Modal, Asset Picker, Timeframe chips, Toast notifications). Settings: `bg-[#06120d]/80 backdrop-blur-xl border border-white/5`.",
+    "borders": "1px solid borders define all panels. Use `border-white/5` for structure and `border-[#14b877]/20` for active/focused elements.",
+    "shadows": "Minimal ambient glow on primary actions. HIGHER button gets `shadow-[0_0_20px_rgba(20,184,119,0.15)]`, LOWER gets `shadow-[0_0_20px_rgba(244,63,94,0.15)]`."
+  },
+  "layouts": {
+    "desktop": "Quotex-style 3-column architecture: Header (h-16). Left Sidebar (w-16, fixed, icon-only). Center (flex-1, Chart area & Asset Tabs). Right Trade Panel (w-[300px], fixed). Open Trades panel is a floating fixed element at bottom-left.",
+    "mobile": "Vertical flow: Header (h-14) -> Scrollable Asset Tabs (h-12) -> Chart Area (flex-1 min-h-[300px]) -> Fixed Bottom Trade Panel.",
+    "spacing": "Dense. Padding inside panels: `p-3` or `p-4`. Gap between widgets: `gap-2` to `gap-4`. Maximize chart area real estate."
+  },
+  "components": {
+    "buttons": {
+      "HIGHER": "Massive footprint. `bg-[#14b877] text-white rounded-md h-14 md:h-16 text-xl font-bold flex items-center justify-center gap-2 transition-all hover:bg-[#14b877]/90 active:scale-95`.",
+      "LOWER": "Massive footprint. `bg-[#f43f5e] text-white rounded-md h-14 md:h-16 text-xl font-bold flex items-center justify-center gap-2 transition-all hover:bg-[#f43f5e]/90 active:scale-95`.",
+      "action": "Deposit, Account Switcher: pill-shaped or rounded-md with glass effect, `bg-white/10 hover:bg-white/15`."
+    },
+    "tabs": "Horizontally scrollable, hide scrollbars (`scrollbar-hide`). Active tab: `bg-white/10 border-t-2 border-[#14b877] text-white`. Inactive tab: `bg-transparent text-[#94a3b8] hover:bg-white/5`.",
+    "inputs": "Investment and Duration controls use stepper design ([-] Input [+]). `bg-black/30 border border-white/10 rounded-md text-center text-lg font-bold tabular-nums`.",
+    "modals": "Shadcn Dialog/Popover styled with dark mode overrides. `bg-[#06120d] border border-white/10 backdrop-blur-xl`."
+  },
+  "motion": {
+    "buttons": "Fast micro-interactions. `transition-transform duration-100 ease-out`.",
+    "panels": "Slide up/in for Modals and Open Trades pane using framer-motion or simple CSS transforms (`translate-y` transitions).",
+    "toast": "Use sonner for success/error notifications, positioned top-right or bottom-center (mobile)."
+  },
+  "accessibility": {
+    "contrast": "Ensure text over dark backgrounds maintains WCAG AA (at least 4.5:1).",
+    "focus": "Keyboard focus states should apply `ring-2 ring-[#14b877]/50 ring-offset-1 ring-offset-[#040D09]`.",
+    "test_ids": "Apply `data-testid` to HIGHER/LOWER buttons, Amount inputs, Duration picker, and Asset tabs."
+  },
+  "media": {
+    "icons": "Use @phosphor-icons/react. Duotone weight for sidebar icons, Bold/Fill for Trade actions.",
+    "chart": "Use `lightweight-charts`. Theme: background `#040D09`, grid lines `#ffffff/5`, up color `#14b877`, down color `#f43f5e`."
+  },
+  "image_urls": {
+    "avatar": {
+      "url": "https://images.unsplash.com/photo-1560250097-0b93528c311a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjB0cmFkZXIlMjBhdmF0YXIlMjBwb3J0cmFpdHxlbnwwfHx8fDE3ODQ3OTc4Njd8MA&ixlib=rb-4.1.0&q=85",
+      "category": "User Profile Placeholder",
+      "description": "Professional male avatar for header profile."
+    }
+  },
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You MUST NOT apply universal transition (e.g., `transition: all`). Add transitions to specific properties (`transition-colors`, `transition-transform`) to avoid breaking chart interactions or layout.",
+    "DO NOT center align the app container. Trading dashboards require absolute edge-to-edge precision, using Flexbox and Grid.",
+    "Always use tabular-nums on changing numerical data to prevent horizontal jumping.",
+    "Use Radix/Shadcn UI for Dialog, Popover, and Select to ensure robust behavior and accessibility.",
+    "The UI is built with .js and .jsx, so do not use TypeScript typings.",
+    "The chart container requires explicit height calculation or `flex-1` stretching. Ensure `lightweight-charts` is properly cleaned up on unmount.",
+    "Avoid fully transparent backgrounds in dropdowns/popovers; always use at least a semi-solid dark color (e.g., `#06120d`) combined with borders.",
+    "Mobile layout requires special attention to the fixed bottom bar. Ensure content above it has enough padding-bottom (`pb-safe`) so it's not hidden."
+  ]
+}

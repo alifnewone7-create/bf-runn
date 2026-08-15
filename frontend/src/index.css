@@ -1,0 +1,297 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #040D09;
+  --surface: #0A1612;
+  --surface-2: #0D1E18;
+  --ink: #ffffff;
+  --muted: #8FA69A;
+  --line: #1A2F24;
+  --green: #14B877;
+  --green-deep: #119A63;
+  --gold: #D4AF37;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #040D09;
+  background-image:
+    radial-gradient(1200px 700px at 50% -10%, rgba(10,36,23,0.9), transparent 62%),
+    radial-gradient(900px 540px at 92% 8%, rgba(20,184,119,0.07), transparent 55%),
+    radial-gradient(800px 520px at 6% 88%, rgba(20,184,119,0.05), transparent 55%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, .font-display {
+  font-family: 'Manrope', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+::selection { background: rgba(20,184,119,0.3); }
+
+/* ---------- Buttons ---------- */
+.lux-btn-primary {
+  background: linear-gradient(135deg, #16c481 0%, #0f9a63 100%);
+  color: #fff;
+  font-weight: 600;
+  transition: transform 0.18s ease, box-shadow 0.22s ease, filter 0.2s ease;
+  box-shadow: 0 12px 30px -12px rgba(20,184,119,0.65), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.lux-btn-primary:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+  box-shadow: 0 18px 40px -14px rgba(20,184,119,0.8), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+.lux-btn-ghost {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.18s ease;
+}
+.lux-btn-ghost:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(20,184,119,0.4);
+  transform: translateY(-2px);
+}
+
+/* ---------- Gradient cards ---------- */
+.lux-card {
+  background: linear-gradient(145deg, #0D1E18 0%, #071009 60%, #040D09 100%);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px;
+  transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+}
+.lux-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(20,184,119,0.35);
+  box-shadow: 0 30px 60px -34px rgba(0,0,0,0.9), 0 0 24px -8px rgba(20,184,119,0.18);
+}
+
+.lux-card-active {
+  background: linear-gradient(150deg, rgba(20,184,119,0.14) 0%, #0D1E18 40%, #040D09 100%);
+  border: 1px solid rgba(20,184,119,0.5);
+  border-radius: 22px;
+  box-shadow: 0 0 45px -12px rgba(20,184,119,0.35), 0 30px 70px -40px rgba(0,0,0,0.95);
+}
+
+.lux-glass {
+  background: rgba(4,13,9,0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ---------- Text helpers ---------- */
+.lux-green { color: var(--green); }
+.lux-gold { color: var(--gold); }
+.lux-muted { color: var(--muted); }
+
+.lux-eyebrow {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+.lux-gradient-text {
+  background: linear-gradient(100deg, #ffffff 20%, #14B877 75%, #D4AF37 105%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lux-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(120deg, rgba(20,184,119,0.14), rgba(20,184,119,0.05));
+  border: 1px solid rgba(20,184,119,0.3);
+  color: var(--green);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.lux-icon-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(20,184,119,0.16), rgba(20,184,119,0.04));
+  border: 1px solid rgba(20,184,119,0.25);
+  box-shadow: 0 0 18px -6px rgba(20,184,119,0.25), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.lux-divider { border-top: 1px solid var(--line); }
+
+/* ---------- Decorative ---------- */
+.lux-grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+.lux-fade-up { opacity: 0; transform: translateY(18px); animation: luxFadeUp 0.65s ease forwards; }
+@keyframes luxFadeUp { to { opacity: 1; transform: translateY(0); } }
+
+@keyframes luxFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.lux-float { animation: luxFloat 6s ease-in-out infinite; }
+
+/* Legacy aliases used by auth pages */
+.bfg-btn-primary { background: linear-gradient(135deg, #16c481 0%, #0f9a63 100%); color: #fff; font-weight: 600; transition: transform 0.18s ease, box-shadow 0.22s ease, filter 0.2s ease; box-shadow: 0 12px 30px -12px rgba(20,184,119,0.65); }
+.bfg-btn-primary:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.bfg-btn-dark, .bfg-btn-outline, .bfg-btn-light { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: #fff; font-weight: 600; transition: background 0.2s ease, border-color 0.2s ease; }
+.bfg-btn-dark:hover, .bfg-btn-outline:hover, .bfg-btn-light:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.22); }
+.bfg-card { background: linear-gradient(145deg, #0D1E18 0%, #040D09 100%); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; }
+.bfg-green-text { color: var(--green); }
+.text-muted-bfg { color: var(--muted); }
+.bfg-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--green); }
+.bfg-pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(20,184,119,0.1); border: 1px solid rgba(20,184,119,0.28); color: var(--green); border-radius: 999px; font-weight: 600; font-size: 13px; }
+
+@layer base {
+  :root {
+    --background: 156 40% 4%;
+    --foreground: 150 12% 96%;
+    --card: 158 32% 7%;
+    --card-foreground: 150 12% 96%;
+    --popover: 158 32% 7%;
+    --popover-foreground: 150 12% 96%;
+    --primary: 156 80% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 156 14% 14%;
+    --secondary-foreground: 150 12% 96%;
+    --muted: 156 12% 14%;
+    --muted-foreground: 150 10% 60%;
+    --accent: 156 14% 14%;
+    --accent-foreground: 150 12% 96%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 152 28% 14%;
+    --input: 152 28% 14%;
+    --ring: 156 80% 45%;
+    --radius: 0.9rem;
+  }
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes tp-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tp-fade-up {
+  animation: tp-fade-up 0.22s ease-out;
+}
+
+
+
+/* Live-price heartbeat pulse (Quotex-style). Applied to a fixed-size dot with
+   background-color set inline. The ::before creates the expanding halo ring. */
+.bfg-live-pulse { position: absolute; }
+.bfg-live-pulse::before {
+  content: '';
+  position: absolute; inset: -3px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.55;
+  animation: bfg-pulse-ring 1.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  color: inherit;
+  background: inherit;
+}
+@keyframes bfg-pulse-ring {
+  0%   { transform: scale(0.6); opacity: 0.55; }
+  70%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+
+/* ---------- Terminal boot skeleton (Quotex-style) ---------- */
+/* Soft breathing rectangles for header/side/panel placeholders. */
+.bfg-skel {
+  background: linear-gradient(
+    100deg,
+    rgba(255,255,255,0.045) 0%,
+    rgba(255,255,255,0.09) 45%,
+    rgba(255,255,255,0.045) 90%
+  );
+  background-size: 200% 100%;
+  animation: bfg-skel-shine 1.6s ease-in-out infinite;
+}
+@keyframes bfg-skel-shine {
+  0%   { background-position: 200% 0; opacity: 0.85; }
+  50%  { opacity: 1; }
+  100% { background-position: -200% 0; opacity: 0.85; }
+}
+
+/* Chart area — flat dark rectangle with a subtle repeating diagonal stripe
+   pattern that stays static (no pulse) to match the Quotex reference. */
+.bfg-chart-skel {
+  background-color: #0b1712;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255,255,255,0.018) 0px,
+    rgba(255,255,255,0.018) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+}
+
+/* ---------- Trade result (P/L) card ---------- */
+@keyframes bfg-result-pop {
+  0%   { opacity: 0; transform: scale(0.88) translateX(-6px); }
+  60%  { opacity: 1; transform: scale(1.03) translateX(0); }
+  100% { opacity: 1; transform: scale(1) translateX(0); }
+}
+.bfg-result-pop {
+  animation: bfg-result-pop 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: right center;
+}
+@keyframes bfg-result-timer {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+.bfg-result-timer {
+  animation-name: bfg-result-timer;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  opacity: 0.7;
+}
+
+/* ---------- Open-trade badge stack ---------- */
+/* Badges that land on nearly the same spot are cascaded behind one another
+   (card-deck style) instead of covering each other completely. */
+.bfg-trade-badge {
+  transition: filter 0.18s ease, opacity 0.18s ease;
+  will-change: transform;
+}
+@keyframes bfg-badge-in {
+  from { opacity: 0; transform: translate(-100%, -50%) scale(0.85); }
+  to   { opacity: 1; transform: translate(-100%, -50%) scale(1); }
+}
+

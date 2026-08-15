@@ -1,0 +1,66 @@
+{
+  "summary": "Verified the mobile overscroll/rubber-band fix on /demo-trade. On iPhone-emulated viewport (390x844, hover=none, pointer=coarse, touch enabled) the DemoTrade useEffect correctly sets document.body/documentElement inline overscrollBehavior='none' + overflow='hidden' at mount, and the root div carries 'overflow-hidden overscroll-none touch-pan-x' plus inline overscrollBehavior:'none'. Aggressive synthetic touch drags (pull-down from top ~400px, pull-down from chart middle ~500px, pull-up from bottom trade panel) produced ZERO vertical scroll offset, zero body/root shift, and root.bottom == window.innerHeight (no extra strip). Navigating away to '/' cleanly restored html/body inline overscroll/overflow to their original empty values (cleanup works). Desktop 1440x900 regression: chart canvas, header, side rail, asset tabs, trade panel all render correctly; overscroll lock is applied while on /demo-trade and restored on navigation away.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": {
+    "mobile_390x844_touch_emulated": {
+      "cdp_features": "Emulation.setEmulatedMedia hover=none pointer=coarse + Emulation.setTouchEmulationEnabled=true applied BEFORE /demo-trade navigation",
+      "on_mount_inline_styles": {
+        "body.style.overscrollBehavior": "none",
+        "html.style.overscrollBehavior": "none",
+        "body.style.overflow": "hidden",
+        "html.style.overflow": "hidden",
+        "computed_body_overscrollBehaviorY": "none",
+        "computed_html_overscrollBehaviorY": "none"
+      },
+      "root_div_classes": "h-[100dvh] flex flex-col text-white bg-[#040D09] overflow-hidden overscroll-none touch-pan-x",
+      "root_inline_overscrollBehavior": "none",
+      "after_aggressive_touch_drags": {
+        "window.scrollY": 0,
+        "body.getBoundingClientRect().top": 0,
+        "root.top": 0,
+        "root.bottom": 844,
+        "window.innerHeight": 844,
+        "verdict": "No rubber-band strip visible at top or bottom; root fills viewport exactly."
+      },
+      "cleanup_after_navigating_to_/": {
+        "body.style.overscrollBehavior": "(restored to empty)",
+        "html.style.overscrollBehavior": "(restored to empty)",
+        "body.style.overflow": "(restored to empty)",
+        "html.style.overflow": "(restored to empty)",
+        "home_page_scrolls_normally": true
+      }
+    },
+    "desktop_1440x900": {
+      "renders_without_regression": true,
+      "chart_canvases_present": 7,
+      "header_present": true,
+      "root_bottom_equals_innerHeight": true,
+      "overscroll_lock_applied_while_mounted": true,
+      "styles_restored_after_leaving": true
+    }
+  },
+  "test_report_links": [
+    "/app/test_reports/overscroll/mobile_after_pull_down_top.jpeg",
+    "/app/test_reports/overscroll/mobile_after_drags.jpeg",
+    "/app/test_reports/overscroll/desktop_demo_trade.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and correctly scoped: single useEffect in DemoTrade.jsx snapshots prior inline values and restores them in cleanup, so no leakage to other routes. Uses inline styles rather than a class on body — good, as it avoids conflicts with any global body class rules.",
+    "Belt-and-braces: root div also has Tailwind 'overscroll-none' + inline overscrollBehavior:'none' + 'touch-pan-x' (allows horizontal but blocks vertical browser gestures). Combined with html/body overflow:hidden this fully suppresses pull-to-refresh/rubber-band on WebKit + Chromium mobile.",
+    "Consider also setting overscrollBehaviorY explicitly on the root div for older iOS Safari versions that only honor overscroll-behavior-y — currently 'overscrollBehavior:none' shorthand should cover it, but worth noting if any iOS 15 users report residual bounce."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "New TEST_ user registered on VPS api.binaryfundglobal.com: test_overscroll+1785850322@example.com / TestPass123! (JWT stored in localStorage.bfg_token during tests). Existing user test_chart_qa+2026@example.com has 2FA enabled which blocks direct password login — flagged for future testers.",
+  "seed_data_creation": "1 test user via POST /api/auth/register on api.binaryfundglobal.com (id 81010f33-ecab-47e5-9aa3-1d2266c39ca0).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "For /demo-trade auth on VPS backend, register a fresh TEST_ user via POST https://api.binaryfundglobal.com/api/auth/register and set localStorage.bfg_token before navigating. The provided existing user (test_chart_qa+2026@example.com) now has 2FA enabled so direct login returns requires_2fa:true. Touch emulation MUST be enabled BEFORE navigation via CDP Emulation.setEmulatedMedia hover=none pointer=coarse + Emulation.setTouchEmulationEnabled=true (window.matchMedia is read at mount).",
+  "rca of the issue": "N/A — overscroll/rubber-band fix works as intended on both mobile and desktop, with proper cleanup on unmount so other routes are unaffected."
+}

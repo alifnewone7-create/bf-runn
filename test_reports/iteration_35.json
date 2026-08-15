@@ -1,0 +1,27 @@
+{
+  "summary": "Independently verified the pan-lock over-pan drawing-drift bug fix on /demo-trade using per-frame rAF sampling of the drawing-canvas leftmost painted column vs. the rightmost candle column across the trade-chart canvases. Tested both desktop (1920x900, mouse drag) and mobile (390x844, CDP touch dispatch + fling). In both cases the drawing stayed glued to its anchor candles while the drag continued past the left-pan lock, and the pan-lock ratio (newest candle at ~50% of wrapper width) held after release. Also confirmed the compact style bar close button worked and drawing creation lands correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/overpan_desktop.jpeg",
+    "/app/test_reports/overpan_mobile.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix implementation is clean: panExcessPxRef exposes the timeScale over-pan gap in pixels and DrawingLayer's rAF loop + conv() both consume it through makeConverters({xShift}). The gap is applied symmetrically in x(t) (add) and t(x) (subtract), so hit-testing during an over-pan attempt also stays consistent.",
+    "geom.js: xShift default of 0 keeps the previous behaviour when panExcessPxRef is not wired — safe fallback.",
+    "The continuous clampLoop in TradeChart.jsx runs every frame regardless of drag state. This is fine functionally but is a persistent RAF that could be gated on a dragging flag to save battery on idle tabs (minor perf nit)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% (all requested pan-lock tests)"},
+  "test_credentials": "qa.draw.tester99@binaryfundglobal.com registered this run; token in script",
+  "seed_data_creation": "Registered qa.draw.tester99 on VPS (no trades placed).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Per-frame sampler approach: use canvas.getImageData on [data-testid=drawing-canvas] to find leftmost opaque column and on each canvas inside [data-testid=trade-chart] to find rightmost opaque column. During over-pan the two values must move together, and once the pan-lock is hit BOTH must stabilize (no alternating-frame drift). Before the fix the drawing x alternated on odd frames while candle x was pinned; after the fix both stay pinned. Desktop trace this run: dl stable at 460-464 (range 4px, max frame delta 4px) while cr pinned at 779. Mobile: dl pinned at 0 while cr pinned at 195; pan-lock ratio 0.50 on both. Token in /app/memory/test_credentials.md may be expired — register a new one with POST /api/auth/register (no 2FA on register).",
+  "rca of the issue": "DrawingLayer is a child of TradeChart, so its requestAnimationFrame paint loop is registered BEFORE the parent's clamp RAF. On frames where a drag had just pushed the visible logical range past the left-pan lock, the drawing painted using the over-panned timeScale coordinates while the candle series was still painted at the clamped position → the drawing appeared to slide left away from its candles. Fix (verified): TradeChart exposes panExcessPxRef.current() returning the current over-pan gap in pixels; DrawingLayer's makeConverters + conv() now add that xShift in x(t) and subtract it in t(x), cancelling the one-frame gap so the drawing sticks to the series."
+}

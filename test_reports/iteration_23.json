@@ -1,0 +1,66 @@
+{
+  "verdict": "not_fixed",
+  "user_reported_bug": "shob to set korlam new 6 file tarpore error ashtache check koren to ar origins set kora ache",
+  "summary": "No relevant testing skill found. Focused VPS probes against https://api.binaryfundglobal.com show the backend is still serving OLD code: GET /api/admin/markets returns 404 instead of expected auth-required 401, and GET /api/market/instruments still exposes a plain payout key. Existing admin routes return 401/405, and CORS preflight for the origin returns 200, so this is not an origins/CORS failure and not a broken admin router mount.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET https://api.binaryfundglobal.com/api/admin/markets",
+        "issue": "Returned 404 {\"detail\":\"Not Found\"}. Expected 401 Not authenticated if the new /markets route is live. This proves the VPS admin_routes.py in the running process is stale or the service was not restarted after copying files.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET https://api.binaryfundglobal.com/api/market/instruments",
+        "issue": "Returned 200 but response items still include a plain \"payout\" field, proving the VPS market.py/market_routes code path is still OLD and the new payout-hiding change is not live.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "OPTIONS https://api.binaryfundglobal.com/api/admin/markets",
+        "issue": "CORS preflight returned 200 with access-control-allow-origin: https://binaryfundglobal.com, so the observed admin Markets tab Not Found is not caused by origins/CORS. Note: CORS preflight does not prove route registration because middleware handles it before routing."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin panel Markets tab",
+        "issue": "The tab will continue to show Not Found because the live VPS GET /api/admin/markets route returns 404.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/vps_deployment_verification_iter23.py",
+    "/app/test_reports/bug_verification_23.json",
+    "/app/test_reports/iteration_23.json"
+  ],
+  "action_items": [
+    "Redeploy the updated backend files to the exact directory used by the VPS service: routes/admin_routes.py, market.py, routes/sio_hub.py, routes/trade_routes.py, plus any other changed backend files from the six-file copy.",
+    "Restart the live VPS backend process after copying files: e.g. sudo systemctl restart <backend-service> or sudo supervisorctl restart backend, depending on the VPS setup. Confirm with ps aux | grep -E 'uvicorn|gunicorn|python' that the running process points to the updated app path.",
+    "On the VPS, verify the copied file actually contains @router.get(\"/markets\") in backend/routes/admin_routes.py and that backend/market.py instrument_list() does not append \"payout\".",
+    "After restart, rerun: curl -i https://api.binaryfundglobal.com/api/admin/markets should return 401, and curl -s https://api.binaryfundglobal.com/api/market/instruments should not contain \"payout\".",
+    "Do not focus on CORS/origins for this symptom: preflight already succeeds for https://binaryfundglobal.com."
+  ],
+  "critical_code_review_comments": [
+    "Local /app/backend/routes/admin_routes.py contains the new @router.get(\"/markets\") at line 254 and @router.patch(\"/markets/{symbol}\") at line 285, but the VPS returns 404 for the same route. This points to stale deployed code or an unrestarted process, not a local code-missing issue.",
+    "Local /app/backend/market.py instrument_list() lines 227-234 intentionally omit payout, while the VPS /api/market/instruments response still includes payout. That independently confirms the VPS is not running the new local code."
+  ],
+  "updated_files": [
+    "/app/tests/vps_deployment_verification_iter23.py",
+    "/app/test_reports/bug_verification_23.json",
+    "/app/test_reports/iteration_23.json"
+  ],
+  "success_rate": {
+    "backend": "40% - existing admin router and CORS are alive, but both new deployment indicators fail",
+    "frontend": "N/A - backend-only verification"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Repeat the same VPS probes only after the user redeploys and restarts the backend service. Expected fixed evidence: GET /api/admin/markets returns 401 unauthenticated, existing admin endpoints remain non-404, and /api/market/instruments no longer includes any payout key.",
+  "rca_of_the_issue": "Reproduction: python /app/tests/vps_deployment_verification_iter23.py. Results: /api/admin/markets -> 404, /api/market/instruments -> 200 with payout, existing /api/admin/stats/users/me/login -> 401/405 non-404, CORS preflight -> 200. RCA: the live VPS process is running OLD backend code or a different deployment directory; admin_routes.py and market.py changes from local /app/backend are not active on https://api.binaryfundglobal.com."
+}

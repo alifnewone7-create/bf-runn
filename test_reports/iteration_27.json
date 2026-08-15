@@ -1,0 +1,55 @@
+{
+  "summary": "Verified two TradeChart.jsx behaviours end-to-end on the real /demo-trade page (authenticated against the live VPS backend api.binaryfundglobal.com): (1) lightweight-charts crosshair shows on desktop but is fully hidden on touch devices, and (2) the 50% right-pan clamp holds on both desktop and mobile — the newest candle cannot be pushed further left than the horizontal midpoint of the plotting area.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": {
+    "test_route": "/demo-trade",
+    "auth_setup": "Registered TEST user via VPS: test_chart_qa+2026@example.com. Stored JWT in localStorage.bfg_token; page mounted DemoTrade + TradeChart successfully in both viewports.",
+    "desktop_1440x900": {
+      "hover_none_match_media": false,
+      "crosshair_visible_on_hover": "YES — thin white dashed vertical + horizontal lines follow the cursor with axis labels (e.g., '1.06982' on price axis and '11:21:00' on time axis) — captured in /app/test_reports/chart_crosshair/v2_desktop_hover.jpeg",
+      "clamp_50pct_after_repeated_drag_left": {
+        "baseline_newest_x_pct_of_wrapper": 88.8,
+        "after_drag_left_pct_of_wrapper": 47.1,
+        "after_drag_left_pct_of_plot_area_excl_price_axis": "~49.7%",
+        "verdict": "Clamp holds at ~50% of the plotting area; further drags do not move newest candle further left (repeated 3 drags stayed at 47.1% of wrapper / ~50% of plot area)."
+      },
+      "live_overlays_visible": ["live-price-line", "live-vert-line-top", "live-vert-line-bottom", "live-price-tag"]
+    },
+    "mobile_390x844_touch_emulated": {
+      "cdp_features": "Emulation.setEmulatedMedia hover=none pointer=coarse + Emulation.setTouchEmulationEnabled=true",
+      "hover_none_match_media": true,
+      "crosshair_visible_on_touch": "NO — no white dashed axis-following lines rendered. Only the live-price dashed line, live-vert-line at newest candle, and live-price-tag remain — captured in /app/test_reports/chart_crosshair/v2_mobile_hover.jpeg and mobile_touch.jpeg",
+      "clamp_50pct_after_repeated_drag_left": {
+        "baseline_newest_x_pct_of_wrapper": 69.1,
+        "after_drag_left_pct_of_wrapper": 42.1,
+        "after_drag_left_pct_of_plot_area_excl_price_axis": "~46.2%",
+        "verdict": "Clamp holds at ~50% of the plotting area; further drags stayed at 42.1% of wrapper (repeats identical)."
+      },
+      "live_overlays_visible": ["live-price-line", "live-vert-line-top", "live-vert-line-bottom", "live-price-tag"]
+    },
+    "regressions_checked": "Candles render on both viewports, live-price tag and live-vert-line still track newest candle, chart-clock and mobile tool rail unaffected, no console errors related to the change."
+  },
+  "test_report_links": [
+    "/app/test_reports/chart_crosshair/v2_desktop_hover.jpeg",
+    "/app/test_reports/chart_crosshair/v2_desktop_pan.jpeg",
+    "/app/test_reports/chart_crosshair/v2_mobile_hover.jpeg",
+    "/app/test_reports/chart_crosshair/v2_mobile_pan.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Clamp measurement in tests uses wrapper width (includes ~35–55px right price axis) so raw ratio reads slightly under 50% (42–47%). Actual chart-plot-area ratio is ~46–50% which matches the intended maxRightOffset = visible/2. If you want the newest candle to land exactly on the visual centre-line of the wrapper, subtract price-axis width from the clamp target — but current behaviour matches the stated spec (‘at least half is candles’)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "test_credentials": "Registered TEST_ user on VPS: test_chart_qa+2026@example.com / TestPass123! (JWT valid until exp 1785845993).",
+  "seed_data_creation": "One test user via POST https://api.binaryfundglobal.com/api/auth/register (id a7613d1f-b29b-412f-9c71-d0e6fcd9e0b6).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "DemoTrade route requires localStorage.bfg_token. For quick auth in tests, POST /api/auth/register on api.binaryfundglobal.com then localStorage.setItem('bfg_token', <token>) before navigating to /demo-trade. Touch emulation via CDP: Emulation.setEmulatedMedia hover=none + setTouchEmulationEnabled=true — the TradeChart useEffect reads window.matchMedia('(hover: none)') AT MOUNT time, so emulation MUST be applied before the page loads.",
+  "rca of the issue": "N/A — both requested changes work as intended."
+}

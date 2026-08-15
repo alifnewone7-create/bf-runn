@@ -1,0 +1,50 @@
+{
+  "summary": "Verified the payout 0% bugfix on /demo-trade against the user's VPS backend. Registered a fresh trader on api.binaryfundglobal.com (no 2FA on register), seeded bfg_token/bfg_user in localStorage, then reloaded the page 6 times (1 cold with bfg_payouts cleared, 5 warm) sampling the desktop payout chip [data-testid=trade-panel-payout-chip] and the big payout [data-testid=trade-profit-pct] 25 times every 200ms per reload. Also verified asset-tab switching, AssetPicker payout rows, symbol-to-symbol consistency, and code-reviewed the backend _settle_one live-payout change.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "payout_test_results": {
+    "reloads_run": 6,
+    "samples_per_reload": 25,
+    "sample_interval_ms": 200,
+    "zero_percent_hits_total": 0,
+    "cold_load_transitions": "TradeSkeleton (None,None) -> (None,'+90%') -> ('90%','+90%') within ~400-600ms. Never rendered '0%'.",
+    "warm_load_transitions": "Almost immediate '90%' on chip because bfg_payouts cache is used at render time; 'None' only during the very first paint of the skeleton before instruments HTTP resolves.",
+    "bfg_payouts_localStorage_populated": true,
+    "bfg_payouts_sample": "{EURUSD_OTC:90, GBPUSD_OTC:88, USDJPY_OTC:88, EURAUD_OTC:88, AUDCAD_OTC:85, USDCHF_OTC:84, NZDUSD_OTC:80, EURGBP_OTC:83, USDCAD_OTC:86, AUDUSD_OTC:85, GBPJPY_OTC:87, USDBDT_OTC:90, ...}",
+    "asset_picker_payouts_sample": {"EURUSD_OTC":"90%","GBPUSD_OTC":"88%","USDJPY_OTC":"88%","EURAUD_OTC":"88%","AUDCAD_OTC":"85%","USDCHF_OTC":"84%","NZDUSD_OTC":"80%","EURGBP_OTC":"83%","USDCAD_OTC":"86%","AUDUSD_OTC":"85%","GBPJPY_OTC":"87%","USDBDT_OTC":"90%"},
+    "picker_zero_percent_hits": 0,
+    "tab_switch_payouts": {"EURUSD_OTC":"90%","GBPUSD_OTC":"88%","USDJPY_OTC":"88%","EURAUD_OTC":"88%"},
+    "consistency_check_picker_vs_chip": "IDENTICAL for all 4 sampled symbols (EUR/USD 90, GBP/USD 88, USD/JPY 88, EUR/AUD 88)."
+  },
+  "realtime_admin_change_test": "NOT executed end-to-end. No VPS admin credentials are available, so we cannot mutate the payout table server-side. Code review of the client realtime path confirms it works: DemoTrade.jsx socket handler 'markets/payouts' (lines 193-201) merges the new table into a dedicated setPayouts state and updates localStorage; instrumentList (lines 271-273) derives payout from payouts[symbol] at every render, so any admin change delivered on the socket flows straight through to TradePanel and AssetPicker without a reload. No further FE work needed.",
+  "regression_checks": "Not re-tested in this iteration — iterations 51-54 already covered chart jump-to-live, no live right-drift, no snap-back on pan-left, price-axis shrink-only + ns-resize cursor, candle countdown above drawing lines, tab-return refetch, no asset-tab lock icon. No new JS console errors observed on the /demo-trade page during this run (only a benign 'Not connected to trading server' would fire if socket was down — did not occur).",
+  "backend_code_review_ws_routes": {
+    "file": "/app/backend/routes/ws_routes.py",
+    "verdict": "CORRECT",
+    "details": [
+      "engine.meta.get(order.symbol, {}).get('payout') is used to read the live admin payout at settlement time (line 30).",
+      "Decimal-safe: value is wrapped with Decimal(str(live_payout)) before any arithmetic (line 31); falls back to order.payout_pct (already Decimal) when the symbol is missing from engine.meta or its payout is None.",
+      "Persistence: if the live payout differs from the stored one, order.payout_pct is overwritten so the closed trade record shows the payout actually applied (lines 32-33). Good for auditability.",
+      "Profit math unchanged: won -> stake * payout / 100 (quantized to cents), lost -> -stake, refunded -> 0. All three branches use the same 'payout' variable, so the live value is correctly applied only in the 'won' branch (payout is irrelevant to lost/refund math), which is the desired behaviour.",
+      "Nit (non-blocking): if engine.meta[symbol].payout is stored as int/float, Decimal(str(...)) is fine; if ever stored as Decimal, str() round-trip is still safe. No precision loss."
+    ]
+  },
+  "test_report_links": ["/app/test_reports/it55_reg.json", "/app/test_reports/it55_creds.txt", "/app/test_reports/it55_final.jpeg"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DemoTrade.jsx: payouts state + localStorage cache + render-time merge is the right pattern. Consider also merging cached payouts BEFORE the HTTP /instruments response resolves so the TradeSkeleton could be skipped once bfg_payouts is warm; currently the skeleton still shows because !instruments.length gates the render. Minor UX polish only.",
+    "ws_routes.py _settle_one persists the live payout back onto order.payout_pct even for lost/refunded outcomes — harmless (payout doesn't affect their math) but if the product wants the stored payout to reflect 'what would have been paid', current behaviour is correct. Confirm with product."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (code review only)", "frontend": "100%"},
+  "test_credentials": "Registered qa+payout16752@example.com / Test@12345 on VPS (returns JWT immediately, no 2FA on /register). Token stored at /app/test_reports/it55_creds.txt.",
+  "seed_data_creation": "One demo trader account on VPS.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The 0% payout bug is fixed on the frontend. bfg_payouts localStorage + render-time merge works cold + warm. The backend live-payout-at-settlement change in ws_routes.py is a code-only verification; when the user deploys it to the VPS, run an end-to-end test: place a trade, change the payout via admin panel mid-trade, verify the settlement 'profit' uses the NEW payout. No admin credentials available in QA env.",
+  "rca of the issue": "Original 0% bug: socket 'markets/payouts' table was merged INTO the instruments state array. If the socket event arrived before /api/market/instruments HTTP resolved, setInstruments([...]) overwrote the payout entries with a stale HTTP list where payout is undefined -> Number(undefined) === NaN -> rendered as 0%. Fix (verified): a separate payouts state (initialized from bfg_payouts localStorage) is merged onto the instruments list at render time (instrumentList map at lines 271-273), so payout is always the freshest known value and never lost to a race. UI additionally shows an em-dash instead of a misleading 0% when payout is genuinely unknown (TradePanel.jsx lines 125-127, AssetPicker.jsx line 60)."
+}

@@ -1,0 +1,37 @@
+{
+  "summary": "Verified the ws_routes.py legacy-engine defensive fix. Ran the standalone regression /app/tests/test_settle_legacy_engine.py (EXIT=0, all 3 scenarios pass) and added an extended regression /app/tests/test_settle_legacy_engine_extended.py covering lost/lower/unknown-symbol/no-payouts()/exact-tie (EXIT=0). Static code review of ws_routes.py: no unguarded engine attribute access remains, refund credits exactly the stake, per-order try/except cannot mask a DB commit failure (commit is outside the per-order loop). Reproduced the still-broken VPS behaviour (fix not yet deployed): a 5s EURUSD_OTC trade placed via https://api.binaryfundglobal.com stayed open for 20s and history remained empty — expected, deployment-side. Frontend /demo-trade regression: page loads with a valid seeded JWT, payout chip shows 90%, trade-profit-pct shows +90%, chart canvas rendered, live timestamps updating, ZERO console errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_settle_legacy_engine.py",
+    "/app/tests/test_settle_legacy_engine_extended.py"
+  ],
+  "action_items": [
+    "Deploy /app/backend/routes/ws_routes.py to the VPS (copy file + `systemctl restart` the backend service). After deploy, re-run the VPS repro (register → place 5s trade → poll /api/trade/open + /api/trade/history) to confirm expired trades settle and history populates."
+  ],
+  "critical_code_review_comments": [
+    "ws_routes.py _settle_one is now fully defensive against legacy engines: price_at/payouts/meta are all guarded, Decimal math is safe, and a missing price refunds instead of hanging — verified by regressions.",
+    "settle_loop() commits ONCE per batch after the per-order loop; if commit fails, the whole batch is retried in the next tick (the outer except logs it). This is correct — the per-order try/except only skips a single bad order, it does NOT swallow the commit exception.",
+    "Refund path credits `stake` back to wallet.balance and writes a Transaction with tx_type='refund' + balance_after — verified in scenarios C and E (bal went from 100 → 110 = +stake of 10).",
+    "Live-payout override rewrites order.payout_pct so the DB row reflects the payout actually applied (verified in scenario 2 and D).",
+    "Minor nit (not blocking): the settle-loop query is limited to 500 rows per tick. If the backlog on the VPS after the fix is deployed is large, the first few ticks may be busy but will drain quickly at 100ms cadence."
+  ],
+  "updated_files": [
+    "/app/tests/test_settle_legacy_engine_extended.py (new)",
+    "/app/test_reports/iteration_56.json"
+  ],
+  "success_rate": {"backend": "100% (8/8 settlement scenarios pass locally)", "frontend": "100% (payout chip, profit pct, chart, zero console errors)"},
+  "test_credentials": "Registered fresh trader qa+it56_1786711443@example.com (JWT saved to /app/test_reports/it56_token.txt) — used only for the VPS bug-still-present repro.",
+  "seed_data_creation": "One fresh trader account created on VPS via /api/auth/register for the settlement repro; one more created by the browser test for /demo-trade session seeding.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "Local backend is intentionally down (no Postgres/Redis). All backend testing must be done via the two standalone scripts under /app/tests/test_settle_legacy_engine*.py. VPS at https://api.binaryfundglobal.com currently still exhibits the legacy-engine settlement bug — that is EXPECTED until the user copies /app/backend/routes/ws_routes.py to their VPS and restarts systemd. Post-deploy: repeat the register → POST /api/trade/place (5s duration) → poll /api/trade/open+/api/trade/history flow; the trade should transition to closed within ~1s of expiry and appear in history.",
+  "rca of the issue": "VPS's deployed market.py predates Engine.price_at, so ws_routes.py's `engine.price_at(...)` raised AttributeError inside settle_loop. Because the exception happened INSIDE the batch loop but OUTSIDE any per-order guard, the whole batch aborted every tick and no expired order ever settled. Fix: (1) getattr-guard price_at with fallback to engine.price(); (2) getattr-guard payouts() with fallback to engine.meta[sym]['payout'] then to order.payout_pct; (3) refund when no price can be obtained (prevents permanent hang on delisted/unknown symbols); (4) wrap each order's _settle_one call in try/except so a single failing order can no longer poison the whole batch. All four safeguards are exercised by /app/tests/test_settle_legacy_engine{,_extended}.py."
+}

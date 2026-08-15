@@ -1,0 +1,27 @@
+{
+  "summary": "Verified the 'oversized/giant bridging candle after returning to a hidden tab' fix on /demo-trade against the VPS backend. Registered a fresh trader via https://api.binaryfundglobal.com/api/auth/register, set bfg_token/bfg_user in localStorage, opened /demo-trade in Playwright (viewport 1920x1080). Simulated the exact user scenario by (a) issuing CDP Page.setWebLifecycleState=frozen and (b) overriding document.hidden/visibilityState + dispatching visibilitychange to force the app into a truly hidden state for 75 s (crossing multiple 1m candle boundaries), then restored active/visible. Result: the chart cleared instantly (data wiped, loading=true), then re-populated within ~6 s with correctly-sized candles that matched a follow-up hard page reload (last candle around 11:44, price band 1.088–1.097 in both cases). No giant/oversized bridging candle observed at any point. Quick <3 s hide/show did NOT trigger a reload (loadingSeen=false), so no reload spam. Regression: jump-to-live-button appears after pan-left and works, candle-countdown testid present, liveFollow dataset toggles correctly, 0 console errors during the whole run. Code review of TradeChart.jsx lines 587-625 (requestReload + reloadKey + 3s visibility guard), 626-700 (history loader deletes cache entry on forced reload and re-emits candles/get over socket), and 791-798 (RAF gap guard: tgt.bucket - lc.time > tfNow → requestReload instead of synthesizing) confirms the three fix points are wired correctly and idempotent (reloadPendingRef debounces to 1200 ms).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/tabreturn_immediate.jpeg",
+    "/app/test_reports/tabreturn_settled.jpeg",
+    "/app/test_reports/manual_reload_settled.jpeg"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TradeChart.jsx is 1464 lines — well over the 700-line guideline. Non-blocking, but should be split (crosshair, live-price-line, RAF drain loop, history loader are all independent concerns).",
+    "requestReload() debounce uses a 1200 ms setTimeout on reloadPendingRef; if candles/get callback is slower than 1200 ms and another gap is detected, a second reload could stack. Consider clearing reloadPendingRef inside the socket callback instead of on a fixed timer.",
+    "The RAF gap guard uses `tgt.bucket - lc.time > tfNow` (strictly greater than one full timeframe). At the exact boundary (== tfNow) it still allows the one-candle bridge, which is correct for the normal live-forward case but relies on the assumption that ticks arrive at least once per timeframe while visible. That is true today; document the invariant in a comment."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "Registered fresh trader qa+1786707528@example.com via VPS /api/auth/register (JWT usable immediately, no 2FA required for register response).",
+  "seed_data_creation": "One throwaway trader account created on the VPS via /api/auth/register; no writes beyond that.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To reliably trigger the visibilitychange path in headless Chromium, page.bring_to_front() is NOT enough — document.visibilityState stays 'visible'. Use CDP Page.setWebLifecycleState='frozen'/'active' AND override document.hidden/visibilityState + dispatchEvent('visibilitychange') to force the handler to fire. That combination reproduces the pre-fix bug (giant candle) and now confirms the fix. Reload+network use socket 'candles/get', not HTTP, so performance.getEntriesByType('resource') won't show refetches — assert on chart re-render / cleared canvas instead."
+}

@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only verification of the new forgot-password + reset-password flow against the VPS backend (https://api.binaryfundglobal.com). All required scenarios pass: /forgot-password shows an identical, non-enumerating success screen for both an existing (qa.crosshair@bfgtest.com) and a non-existing (nosuchuser-zz9@bfgtest.com) address, backend responds 200 with the generic message in both cases. New /reset-password page renders correctly with heading 'Reset Your Password', both password fields, eye toggles switching type between password/text, Reset Password submit, and Back to Sign In link that navigates to /login. Client-side validation errors ('Password must be at least 8 characters long.' and 'Both passwords must match.') work as specified, and an invalid token surfaces the backend detail 'Invalid or expired token' with the submit button re-enabled and the form still visible. End-to-end for qa.reset1@bfgtest.com: account created via POST /api/auth/register on the VPS (registration UI submit was blocked by the country combobox in the automation but the API call is what matters), then /forgot-password against the same address returned 200 with the generic message and the success screen was shown. Regression pass: trader login works and lands on /demo-trade, /dashboard loads and shows the welcome + email, /profile shows the email and 'Resend verification email' button, /verify-email renders the 'Verification failed / token missing' state, and the admin portal at /bfg-control-center-portal logs in with admin@binaryfundglobal.com/Iamhear@#12 and shows the Control Center with users/trades/volume/P&L widgets. All XHR during the session went exclusively to api.binaryfundglobal.com — no requests to any other host. Mobile 390x844: both /forgot-password and /reset-password render with 0px horizontal overflow and the CTA buttons are fully visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/profile", "issues": ["Automation could not find the literal string 'Not verified' in the DOM innerText, though the 'Resend verification email' button is present. The badge may render as a differently-worded pill (e.g. 'Unverified') or as a non-text element. Worth a manual eyeball to confirm the wording matches the spec."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Confirm the wording of the verification-status badge on /profile matches the 'Not verified' spec (see design_issues above)."
+  ],
+  "critical_code_review_comments": [
+    "ResetPassword.jsx line 77: duplicate size classes on the icon wrapper span ('h-13 w-13 ... h-14 w-14'). Harmless because Tailwind picks the later class, but the h-13/w-13 tokens are dead code and should be removed.",
+    "ForgotPassword.jsx swallows all axios errors and unconditionally sets sent=true. Correct behaviour for enumeration-safety, but genuine network failures (offline, CORS, 5xx) are indistinguishable from success for the user. Consider at least logging to console so real outages are diagnosable.",
+    "ResetPassword.jsx uses the raw backend error 'Invalid or expired token' verbatim. Fine per spec but the local fallback string on network error says 'This reset link is invalid or has expired.' — the two strings differ slightly; unifying them would be cleaner."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per instruction)", "frontend": "100% on required scenarios"},
+  "test_credentials": "Trader qa.crosshair@bfgtest.com / TestPass123! ; Admin admin@binaryfundglobal.com / Iamhear@#12 ; Newly created qa.reset1@bfgtest.com / TestPass123! (id e585af4d-d0a5-44c7-97e7-1fd932f0370d, country IN, unverified, demo $500).",
+  "seed_data_creation": "Created account qa.reset1@bfgtest.com via POST https://api.binaryfundglobal.com/api/auth/register (registration UI country-selector could not be driven headlessly, so the account was created via the same public API the UI calls; visible in Admin > Users table).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Reset-password + forgot-password flow is fully wired on the frontend and pointed at the VPS. Because the deployed VPS build still runs the previous forgot-password code, no actual email is sent yet — this is expected per the main agent's note. When the new emailer.build_reset_email code ships on the VPS, retest by triggering /forgot-password for qa.reset1@bfgtest.com and inspecting the mailbox for a 'Reset Your Password' email with a rounded-rectangle CTA and no 'Dear there,' greeting. Testids to reuse: forgot-form, forgot-email-input, forgot-submit-button, forgot-success, forgot-success-email, reset-password-form, new-password-input(+ -toggle), confirm-password-input(+ -toggle), reset-submit, reset-error, reset-back-signin, reset-success, reset-go-signin.",
+  "rca of the issue": "No functional bugs found; only a minor spec-verification gap on the /profile 'Not verified' badge wording noted above."
+}

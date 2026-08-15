@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only verification of the NEW 'jump-to-live' arrow button on the TradeChart (/demo-trade), against the VPS backend (api.binaryfundglobal.com). Fresh trader registered via VPS /api/auth/register, localStorage seeded with bfg_token + bfg_user, opened /demo-trade at 1920x1080. All six scenarios from the review PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_behaviours": [
+    {"item": "Chart loads authenticated & streams candles", "result": "PASS — [data-testid=trade-chart] renders within 15s, live 1m EUR/USD candles + countdown visible."},
+    {"item": "Button hidden at live edge on initial load", "result": "PASS — is_visible('[data-testid=jump-to-live-button]') = False and wrapper dataset.liveFollow = '1' immediately after mount."},
+    {"item": "Button appears after dragging chart body ~800px right into history", "result": "PASS — after 20-step 800px drag, is_visible = True and dataset.liveFollow flipped to '0'. Button bounding box = {x:1516, y:998, w:36, h:36}, chart box = {x:64, y:52, w:1556, h:1028}. Horizontally 68px from chart right edge (clears the price-axis gutter), vertically 46px above chart bottom (clears the time-axis). Fully inside chart bounds — NOT overlapped/clipped by price or time axis."},
+    {"item": "Clicking button returns chart to live edge & button disappears", "result": "PASS — after click(force=True): is_visible = False, dataset.liveFollow = '1'. Live price line + live candle back at their default parked positions."},
+    {"item": "Live follow keeps working after click (no continuous right-drift)", "result": "PASS — 6 samples of live-vert-line-top translate3d.x over 3s: [1307.5, 1307.5, 1307.5, 1307.5, 1307.5, 1307.5]. Drift = 0.00 px."},
+    {"item": "Regression: small pan-left with newest candle visible → follow re-engages on release", "result": "PASS — a subsequent 60px right-drag + release yielded dataset.liveFollow = '1' and the button stayed hidden."},
+    {"item": "Regression: no tab-lock icon", "result": "PASS — querySelector('[data-testid^=tab-lock-]') = null."},
+    {"item": "Regression: no console JS errors", "result": "PASS — captured console errors + pageerror handlers, list = []."}
+  ],
+  "test_report_links": [".screenshots/jumplive_visible.png"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TradeChart.jsx:845 uses `off < 0` as the browsing predicate. That correctly matches the intent 'newest candle scrolled off to the right', but on very narrow panes where BASE_RIGHT_OFFSET(8) exceeds maxBars, the live-follow block itself clamps `want` down; in that edge case dataset.liveFollow may stay '1' with a slightly reduced parked offset — jumpToLive() still works via scrollToRealTime(). No user-visible issue observed at 1920x1080.",
+    "jumpToLive() only sets followRef.current = true; the RAF then updates browsingRef + setBrowsingHistory(false) on the next frame. There's a ~16-33ms window where a click could theoretically be double-registered — not observed, and the CaretRight arrow visibly disappears well under 200ms in tests.",
+    "Button placement is CSS-fixed via right-[68px]/bottom-[46px] Tailwind literals — hardcoded pixel gutters for the price axis (right) and time axis (bottom). If either axis width becomes dynamic (e.g. price format changes to 8 decimals for crypto) the button could overlap. Consider anchoring to the price/time-axis container refs instead of magic numbers."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "test_credentials": "Registered qa+jumplive<random>@example.com / Test@12345 on VPS (fresh account, JWT-only, no 2FA on register).",
+  "seed_data_creation": "One demo trader per test run via VPS /api/auth/register.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New feature verified: [data-testid=jump-to-live-button] appears only while browsing history (dataset.liveFollow='0' on [data-testid=trade-chart] wrapper), sits at right-68/bottom-46 inside the chart, and on click calls chartRef.timeScale().scrollToRealTime() + sets followRef=true. Reliable checks in this order: (1) initial visibility=false + liveFollow='1', (2) after 800px right-drag: visibility=true + liveFollow='0' + bbox inside chart, (3) after click: visibility=false + liveFollow='1' + live-vert-line-top x stable. Local backend intentionally stopped — always use VPS /api/auth/register + seed localStorage bfg_token/bfg_user.",
+  "rca of the issue": "N/A — feature works as specified."
+}

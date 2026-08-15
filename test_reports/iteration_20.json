@@ -1,0 +1,32 @@
+{
+  "summary": "Retest of sanitizeCandles MAD-based fix on /demo-trade. VERIFIED FIXED. Backend VPS still persists 3 outlier rows at ~1.128 (t=1785196980-1785197100) confirmed via direct GET /api/market/candles?symbol=EURUSD_OTC&tf=60 — batch median=1.06635, deviation ~5.8%. Frontend chart correctly drops them: rendered EUR/USD (OTC) 1m chart shows price band 1.052-1.104 with NO candle bodies at 1.128, matching the expected post-filter state. Legitimate volatility (candle at 1.09898, ~3% off median) is preserved as expected — MAD-based 6*MAD band (~6% for this batch) correctly distinguishes real moves from persisted outliers. Updated /app/tests/test_sanitize_candles.mjs: local copy synced to new MAD logic; all 11 tests PASS including new T8 regression (20 candles @1.066 + 3 outliers @1.128 => outliers dropped), T9 (high-wick spike filter — verifies high/low band check, not just midprice), T10 (small batch <8 skips robust stats).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/market/candles?symbol=EURUSD_OTC&tf=60", "issue": "Backend still returns 3 anomalous OHLC rows at ~1.128 (5.8% off median 1.06635) for timestamps 1785196980-1785197100. Frontend now hides these correctly, but the root cause (bad persisted rows) remains. Recommend a one-time backend cleanup query or a write-time jump-rejection guard so the DB stops accumulating bad data."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/test_sanitize_candles.mjs"],
+  "action_items": [
+    "(OPTIONAL, backend) Purge persisted outlier candles for EURUSD_OTC tf=60 at times 1785196980, 1785197040, 1785197100 (open/close ~1.128) — frontend now filters them client-side, but they still travel over the wire on every fetch (500 rows, ~3 wasted) and would resurface if any downstream client used the raw API.",
+    "(OPTIONAL, backend) Add a write-time tick-jump guard: if new tick deviates >X% from last close, drop / requote before persisting to candle store. Prevents future outlier accumulation."
+  ],
+  "critical_code_review_comments": [
+    "sanitizeCandles now uses robust MAD filter with 6*MAD threshold plus a 0.1%-of-median floor. Handles the reported 5.8%-off cluster while preserving legitimate 5% intraday moves (verified via T6 & real chart render).",
+    "The 0.1%-of-median floor for maxDev can be tight if a batch has truly zero variance (open==close identical on every row). Not observed in real market data, but noted for exotic mocks/tests.",
+    "Filter is still only applied on initial fetch and pagination merge (lines 193, 350). Live socket ticks (`onTick`) are guarded by a separate jump check in lastCandleRef, so they should be OK. No regression risk from this iteration."
+  ],
+  "updated_files": ["/app/tests/test_sanitize_candles.mjs (synced to MAD logic; +3 new tests: T8 regression, T9 high-wick, T10 small-batch)"],
+  "success_rate": {"backend": "N/A (VPS not owned; verified data returned)", "frontend": "unit 11/11 (100%); real-world outlier removal 100% (0 of 3 previously-visible outliers now on chart)"},
+  "test_credentials": "Ephemeral VPS user: chartqa1785203632@example.com / Passw0rd!123 (registered on VPS via /api/auth/register, token injected into bfg_token localStorage).",
+  "seed_data_creation": "One throwaway user (above) registered on VPS for JWT injection only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix verified on Preview URL https://fullstack-deploy-72.preview.emergentagent.com/demo-trade. Backend VPS https://api.binaryfundglobal.com — still returns outlier rows in API but frontend correctly filters them. Unit tests at /app/tests/test_sanitize_candles.mjs mirror production sanitizeCandles logic; run with `node /app/tests/test_sanitize_candles.mjs`.",
+  "rca of the issue": "Original iteration_18 fix used a fixed ±25% midprice threshold, which was insensitive to the real 5.8%-off cluster (iteration_19 finding). Iteration_20 fix replaces fixed threshold with robust Median Absolute Deviation (MAD) filter: compute median of midprices, compute MAD, reject any row whose HIGH or LOW deviates from median by more than max(6*MAD, 0.1% of median). This adapts to each pair's own volatility — for the EUR/USD (OTC) batch (median 1.066), MAD is small so 6*MAD is tight and 5.8%-off rows fall well outside. For a volatile pair (e.g. crypto with 3%+ MAD), the band expands to preserve legitimate movement. Reproduction: navigate to /demo-trade EUR/USD (OTC) 1m; confirm no candle bodies float at 1.128 — chart now caps at ~1.104. Backend root-cause (bad persisted rows) still present; frontend fix is defensive but sufficient for user-facing correctness."
+}

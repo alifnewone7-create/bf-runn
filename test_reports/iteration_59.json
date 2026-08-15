@@ -1,0 +1,45 @@
+{
+  "summary": "Verified new Challenges + Binance Pay purchase feature end-to-end. Backend unit tests (10 in test_binance_pay.py + 6 new edge cases in test_binance_pay_extended.py) all pass. Full code review of binance_pay.py, purchase_routes.py, models.py + seed.py migration, and AdminPortal PurchasesPanel. Frontend was tested against a stubbed VPS API (Playwright route interception on **/api/challenges/plans and **/api/challenges/purchase) with a seeded fake JWT — all plan rendering, purchase overlay, copy-to-clipboard, digits-only input stripping, inline short-id validation, success/error responses and auth gate flows work. One minor auth-related UX bug found (see below).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/purchases", "issue": "The total count is computed by loading every purchase.id into Python (len(scalars().all())) instead of SELECT COUNT(*). Fine for early volumes but should be swapped to a scalar count() before production scale."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ChallengesPage", "issue": "When GET /api/challenges/plans returns 401 the page calls navigate('/login') but the stale bfg_token is NOT cleared, so Login.jsx's useEffect immediately bounces back to /demo-trade. Effective destination on a 401 is /demo-trade, not /login as the spec requires. Fix: on 401 in load(), remove localStorage bfg_token (and any refresh keys) BEFORE navigating to /login, e.g. localStorage.removeItem('bfg_token').", "selector": "ChallengesPage.jsx:173", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/test_binance_pay.py", "/app/tests/test_binance_pay_extended.py"],
+  "action_items": [
+    "ChallengesPage: clear bfg_token on 401 from /api/challenges/plans before navigate('/login') so the redirect actually lands on the login screen instead of /demo-trade.",
+    "(Nit) Replace admin_purchases total = len(scalars().all()) with a SELECT COUNT(*) scalar to avoid loading every row for the count."
+  ],
+  "critical_code_review_comments": [
+    "binance_pay.verify_payment: HMAC-SHA256 signing of urlencoded params + X-MBX-APIKEY header matches Binance /sapi/v1/pay/transactions spec. LOOKBACK_MS = 24*60*60*1000 (verified 24.0 h — not 72).",
+    "purchase_routes: PurchaseRequest.order_id validator rejects non-digits (isdigit) and length 6..40 — good. Duplicate protection is layered: unique constraint on challenge_purchases.order_id + explicit SELECT check before verify. Re-purchase of an already-unlocked plan returns 409. Only plan['locked']==True plans can be purchased.",
+    "Wallet funding: creates or updates the per-plan Wallet row (wallet_type=key, currency=USD) with the full challenge balance; profile.unlocked_accounts is merged (not overwritten) and active_account is switched to the newly purchased plan.",
+    "Challenge row: profit_target, max_daily_loss, max_total_loss and duration_days are computed from ACCOUNT_PLANS. Premium's daily_loss_pct = None is safely coerced to 100 via `rules.get('daily_loss_pct') or 100` so max_daily_loss = account_size (effectively 'no daily limit') — does not crash.",
+    "Client-visible response only includes safe fields (id, plan, balance, purchase dict). Raw Binance payload is stored in ChallengePurchase.raw but NOT returned to the client (nor are API keys ever exposed).",
+    "Schema: /app/backend/seed.py challenge_purchases migration matches models.ChallengePurchase — VARCHAR(64) unique order_id, VARCHAR(30) plan, NUMERIC(20,4) amount, ON DELETE CASCADE on user_id, ON DELETE SET NULL on challenge_id, index on (user_id, created_at DESC).",
+    "/api/admin/purchases uses `require_admin` dependency — non-admin requests return 401/403.",
+    "AdminPortal PurchasesPanel: table has all 12 columns (user, plan, amount, currency, order id, type, payer binance id, payer name, receiver id, account size, paid at, status). Row click opens admin-purchase-detail modal with the full detail grid + payer/receiver/paid_at/created_at. Testids admin-purchases-table, admin-purchase-detail present. Uses adminApi client (bfg_admin_token).",
+    "ChallengesPage: 3-card layout, testids match spec (challenge-plan-<k>, plan-price-<k>, purchase-btn-<k>, plan-owned-<k>, purchase-overlay, purchase-title, binance-pay-option, pay-amount, binance-id-value, binance-name-value, copy-binance-id-btn, order-id-input, verify-payment-btn, purchase-error, purchase-close-btn). order-id-input uses onChange replace(/[^0-9]/g,'') so 'abc123def456' → '123456' (verified). Short-id (<6) inline error blocks API call (verified — no POST fired)."
+  ],
+  "updated_files": ["/app/tests/test_binance_pay_extended.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "test_credentials": "Not needed — Playwright stubbed the VPS API and seeded a fake non-expired JWT (bfg_token). No real login performed (VPS still runs older code).",
+  "seed_data_creation": "None — all data was Playwright-mocked; no DB writes.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints only exist in this repo (not on the VPS at https://api.binaryfundglobal.com). Any real HTTP call to /api/challenges/* will 404 until the user redeploys. Always use Playwright request interception. Backend verification = python3 /app/tests/test_binance_pay.py and /app/tests/test_binance_pay_extended.py (both exit 0). The one open issue is the 401->/login redirect being intercepted by Login.jsx's isLoggedIn() shortcut in ChallengesPage.jsx:173 — clear the token before navigating.",
+  "rca of the issue": {
+    "bug": "401 from /api/challenges/plans lands the user on /demo-trade instead of /login",
+    "reproduction": "1) seed a fake but non-expired bfg_token in localStorage; 2) visit /challenges with the plans endpoint returning 401; 3) observe page.url ends up at /demo-trade.",
+    "root_cause": "ChallengesPage.load() catches 401 and calls navigate('/login') but does not remove localStorage.bfg_token first. Login.jsx has useEffect(() => { if (isLoggedIn()) navigate('/demo-trade', {replace:true}); }, []) — since isLoggedIn() only checks token presence + JWT exp claim (never validates against backend), the stale token still qualifies and the user is instantly bounced to /demo-trade.",
+    "mitigation": "In ChallengesPage.jsx line ~173 do `localStorage.removeItem('bfg_token');` (and any refresh/session keys) BEFORE navigate('/login?next=/challenges'). Alternatively, in Login.jsx, skip the auto-redirect when the URL carries a `next` query so a forced redirect can settle."
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "summary": "Verified env-driven CORS allowlist + admin login flow on local backend (http://localhost:8001). 7/7 pytest tests pass: /api/health OK, /api/config/public returns google_client_id from env, OPTIONS preflight from ALLOWED origin (https://fund-runner.preview.emergentagent.com) returns 200 with access-control-allow-origin echoing origin and access-control-allow-credentials: true; OPTIONS preflight from BLOCKED origin (https://evil-attacker.com) returns NO access-control-allow-origin header; POST /api/auth/login with allowed Origin returns 200 with CORS headers and sets access_token/refresh_token cookies; same POST with blocked Origin returns no CORS header; standard login flow works and cookies are set. CORS security model is functioning as designed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login", "issue": "Response body returns access JWT under key 'token' (not 'access_token' as noted in the review spec). Cookies are correctly named 'access_token'/'refresh_token'. This is a naming inconsistency between body and cookie — frontend must read body.token. Consider aliasing to 'access_token' in AuthResponse for clarity."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_cors_and_auth.py",
+    "/app/test_reports/pytest/cors_auth.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: consider renaming AuthResponse.token -> access_token to match cookie naming and common conventions (documented as 'access_token' in review request). Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.py CORS setup is correct: strict allowlist from CORS_ORIGINS env, allow_credentials=True, no wildcard — matches user requirement.",
+    "Body field 'token' vs cookie 'access_token' naming mismatch (minor)."
+  ],
+  "updated_files": ["/app/backend/tests/test_cors_and_auth.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "admin@binaryfundglobal.com / Iamhear@#12 — works",
+  "seed_data_creation": "None; admin user is seeded by backend on startup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_cors_and_auth.py covers CORS allowlist + login. Run via `pytest /app/backend/tests/test_cors_and_auth.py`. All checks against http://localhost:8001 (not REACT_APP_BACKEND_URL). Admin credentials in /app/backend/.env.",
+  "rca of the issue": "No bug — user-reported 'network error on login' was suspected CORS. Verified that current CORS config strictly enforces the env allowlist and correctly permits credentials for listed origins. If a user still sees network errors from the browser, root cause is likely that the browser origin is not present in CORS_ORIGINS (must be added to backend/.env, then restart backend)."
+}

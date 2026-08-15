@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only verification that REACT_APP_BACKEND_URL points to the user's VPS. Confirmed /app/frontend/.env has REACT_APP_BACKEND_URL=https://api.binaryfundglobal.com. Frontend loads Binary Fund Global landing page successfully. Network trace shows outgoing API calls target https://api.binaryfundglobal.com/api/config/public — env is being consumed correctly via /app/frontend/src/lib/apiBase.js (API_BASE = REACT_APP_API_BASE || REACT_APP_BACKEND_URL).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "GET /api/config/public from browser", "issue": "CORS blocked: 'No Access-Control-Allow-Origin header is present' when calling https://api.binaryfundglobal.com/api/config/public from the emergent preview origin. This is a backend (VPS) CORS configuration issue, not a frontend env issue. User needs to add the frontend preview/production origin(s) to CORS allow-list on the VPS backend.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "No frontend action needed — .env is correct and API_BASE resolves to https://api.binaryfundglobal.com.",
+    "Advise user: to fully exercise the app from the preview URL, allow the preview origin in the VPS backend CORS config. From the actual production domain that will host the frontend, ensure that origin is also allow-listed.",
+    "Optional hardening (already in place): apiBase.js prefers REACT_APP_API_BASE over REACT_APP_BACKEND_URL, so if the platform ever resets REACT_APP_BACKEND_URL back to the emergent placeholder, setting REACT_APP_API_BASE=https://api.binaryfundglobal.com would survive that reset."
+  ],
+  "critical_code_review_comments": [
+    "apiBase.js correctly abstracts base URL selection; consider throwing/console.error if neither env is defined so misconfig is obvious.",
+    "WDS_SOCKET_PORT=443 in .env causes dev websocket to try ws://localhost:443/ws which fails — harmless for functionality but produces console noise. Consider removing when running locally, or set to 3000."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% for env/URL verification"},
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "User's backend is external (VPS at https://api.binaryfundglobal.com). Do NOT try to run backend in this pod. Verify /app/frontend/.env still has REACT_APP_BACKEND_URL=https://api.binaryfundglobal.com. apiBase.js also honors REACT_APP_API_BASE first as a reset-proof override.",
+  "rca of the issue": "REACT_APP_BACKEND_URL was previously being reset by the platform to the emergent preview placeholder. Current .env is correct. Root cause of past resets is platform-side .env normalization; mitigated by apiBase.js preferring REACT_APP_API_BASE. Verified network calls in-browser go to api.binaryfundglobal.com."
+}

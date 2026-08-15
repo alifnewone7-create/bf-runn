@@ -1,0 +1,37 @@
+{
+  "summary": "Verified removal of the pair-switch 'Position locked' guard on /demo-trade. Free pair switching while a trade is open works perfectly, running trades continue to settle on the server after switching away, multiple open trades on different pairs coexist correctly, and the tab close guard still uses the new 'Trade running' toast title (verified in code — see caveat below). One pre-existing (non-regression) issue observed: 32 React 'Encountered two children with the same key' warnings appear after trade settlement — the Recent Results / trades list is rendering each settled trade twice.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Trade settlement history rendering",
+        "issue": "After a trade settles, React logs 'Encountered two children with the same key' warnings (32 in a short session). The Recent Results panel visibly showed each settled trade duplicated (2 GBPUSD Lower + 2 EURUSD Higher for only 1+1 placed trades). Not a regression from the pair-lock removal but user-visible.",
+        "affected_selectors": ["[data-testid^=\"closed-trade-\"]", "[data-testid^=\"open-trade-\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/it49_initial.png",
+    "/app/test_reports/it49_after_switch_back.png",
+    "/app/test_reports/it49_trades_panel.png",
+    "/app/test_reports/it49_final.png"
+  ],
+  "action_items": [
+    "(Optional) Deduplicate the trades panel list — likely the just-settled trade is being pushed into `history` while also still present in `openTrades` (or the WS event is fired twice), yielding a duplicate React key. Investigate DemoTrade.jsx history/openTrades state transitions in the trade/settle socket handler."
+  ],
+  "critical_code_review_comments": [
+    "requestSwitchActive() correctly no longer blocks on openTrades (DemoTrade.jsx L262-267) — matches the requirement.",
+    "closeTab() guard uses toast title 'Trade running' (L279) — matches the requirement. However, the guard is unreachable via UI: renderTab (L406-414) REPLACES the close X with a lock icon whenever the tab has open trades, so the user cannot click a close button on a tab with a running trade and thus cannot trigger the toast. This is a UX design choice, not a bug, but worth confirming that E1 intended the toast to be defense-in-depth only.",
+    "tab-lock-<symbol> title attribute set to 'Trade running' (L407) — matches the requirement."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (skipped)", "frontend": "100% for the pair-lock removal requirement" },
+  "test_credentials": "Registered fresh: qa.it49c.<ts>@example.com / QaDraw#2026x via POST /api/auth/register (VPS). Existing qa.cross45.yxlsdp@example.com now requires 2FA (login returns requires_2fa=true, pending_token) — memory/test_credentials.md should note the 2FA gate.",
+  "seed_data_creation": "None; used fresh registration via VPS API.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pair-switch lock removal is fully verified. Evidence: placed a $1 UP on EURUSD_OTC (Timer 01:00), switched to GBPUSD_OTC / USDJPY_OTC / back — zero 'Position locked' toasts, chart header + candle series switched correctly, tab-lock-EURUSD_OTC badge persisted while switching, and after returning to EURUSD_OTC the running trade's overlays were still on its chart. Placed a second $1 DOWN on GBPUSD_OTC; both tab-lock badges rendered simultaneously and the Trades count showed 2. Switched away to USDJPY_OTC, waited 70s: both locks cleared, balance went $500 -> $498 -> $501.78 (2 wins @ +$0.88/+$0.90), Recent Results populated. close-tab-GBPUSD_OTC then became clickable and removed the tab. Only issue: React duplicate-key warnings from the trades list after settlement (see integration_issues). qa.cross45.yxlsdp@example.com is now 2FA-gated on the VPS — use fresh registration.",
+  "rca of the issue": "Duplicate-key warnings after settlement: likely the settled trade is added to `history` before being removed from `openTrades` (or a socket 'trade/settle' event fires twice), so during that overlap two TradesPanel rows render with the same `t.id`. Suggested fix: in the settle handler, atomically move the trade — `setOpenTrades(o => o.filter(x=>x.id!==id)); setHistory(h => h.some(x=>x.id===id) ? h : [settled, ...h])` — and add a Set-based dedupe on the WS event."
+}

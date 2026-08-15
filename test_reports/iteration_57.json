@@ -1,0 +1,38 @@
+{
+  "summary": "Verified socket 'Not authenticated' race + stale-token-after-reconnect fix on the LIVE preview frontend against the OLD VPS backend. Placed multiple trades, forced a socket reconnect with an invalid token, confirmed the client detects the ack error, calls /api/auth/refresh, re-emits 'auth' and recovers on the very next click once a valid token is available — no page refresh required. No infinite retry loop. Extra 'token' field in trade payload is silently ignored by the OLD VPS backend (verified with direct python-socketio client), so the frontend change is safe to ship before the VPS backend is redeployed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "socket.io trade/place", "issue": "OLD VPS backend still returns 'Not authenticated' when the sid is not bound and a token is passed in payload (expected — the new sio_hub.py has not been deployed to the VPS yet). New /app/backend/routes/sio_hub.py inline-auth code has been statically reviewed: it strips the 'token' key before PlaceTradeRequest(**...), calls the existing _authenticate_sid helper (same code path as background/handshake auth), scopes the sid→user_id binding to the current sid only, and is wrapped in try/except so it cannot throw. Safe to deploy."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Very-first-click before socket 'connected'", "issue": "When a click fires within ~200ms of navigation the ws.connected flag is still false, so placeTrade shows 'Not connected to trading server' instead of queuing. Not the RCA bug (RCA is about a CONNECTED-but-unauthenticated socket), but worth queuing the emit for a short grace period.", "affected_selectors": ["[data-testid='trade-higher-button']", "[data-testid='trade-lower-button']"]},
+      {"flow": "Stale-token click with no refresh cookie", "issue": "Two POST /api/auth/refresh calls are fired for a single click (one from the socket 'connect' handler's ensureAuthed, one from the trade/place ack retry). Both bounded, no loop, but could be deduped by sharing an in-flight ensureAuthed() promise.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_sio_trade_race.py"
+  ],
+  "action_items": [
+    "Deploy the updated /app/backend/routes/sio_hub.py to the VPS to close the fast-first-click auth race server-side (currently only the client-side mitigations are live).",
+    "OPTIONAL: dedupe concurrent ensureAuthed() calls (single in-flight promise) to avoid double /api/auth/refresh on a stale-token click.",
+    "OPTIONAL: on trade click before ws.connected, wait ≤500ms for the connect event before falling back to 'Not connected to trading server'."
+  ],
+  "critical_code_review_comments": [
+    "sio_hub.on_trade_place: inline auth via payload.token uses the same _authenticate_sid used by handshake/late-auth, only mutates _conns[sid] for THIS sid, and enters only the caller's own user room — no cross-user leak possible.",
+    "DemoTrade.jsx socket 'auth' callback now reads localStorage on every reconnect (not the frozen mount snapshot) — matches the RCA.",
+    "placeTrade retries trade/place exactly once on 'Not authenticated' ack — bounded, verified in TEST 4 (1 refresh call for a single click)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Registered qa+ejybedl7@example.com / Test@12345 on VPS for this run (token in /tmp/qauser2.json). Also qa+a3sexxg9@example.com used for the socket race harness.",
+  "seed_data_creation": "Two fresh trader accounts registered on VPS via /api/auth/register. 5 successful demo trades placed on qa+ejybedl7 (balance 500 → 495). 3 test trades placed via python-socketio.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Direct python-socketio harness at /app/tests/test_sio_trade_race.py demonstrates three modes vs the VPS: (A) no-handshake-auth+token-in-payload → OLD backend rejects with 'Not authenticated' (proves the server-side deploy is pending), (B) handshake auth + token in payload → OLD backend accepts trade with extra 'token' key silently (proves the new payload is backward-compatible), (C) explicit 'auth' emit → OLD backend accepts. The frontend's on('connect') → emit('auth') keeps behavior working against the OLD backend. Register fresh users each run — login on this VPS requires email 2FA. Do NOT start the local backend/supervisor.",
+  "rca of the issue": "CONFIRMED. Old client froze the JWT at mount time and passed it in the socket handshake auth (auth: { token }). The server authenticates the sid in a background task, so (1) a very fast first click could race the auth binding, and (2) after any ws reconnect the frozen token — often expired due to the short access-token TTL — left the sid unauthenticated forever, making every subsequent trade/place ack 'Not authenticated' until the page was manually refreshed. Fix (frontend, verified LIVE): socket auth is now a callback that re-reads localStorage on every (re)connect; on 'connect' the client emits 'auth' explicitly and, if the ack is not ok, runs ensureAuthed() which POSTs /api/auth/refresh, saves the new token, re-emits 'auth' and — as a last resort — cycles the socket. trade/place transparently re-authenticates and retries ONCE on a 'Not authenticated' ack. The trade payload also carries the current token so a pending sio_hub.py deploy can bind the sid inline. Fix (backend, /app/backend/routes/sio_hub.py, pending VPS deploy): on_trade_place inline-authenticates from payload.token when the sid is not yet bound, and strips the 'token' key before PlaceTradeRequest validation. Reviewed as safe."
+}

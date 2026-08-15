@@ -1,0 +1,37 @@
+{
+  "summary": "Iter60 — Verified the resolve_entry_price fix for the 'server error' bug on trade/place. Backend unit script passes (all 7 legacy-engine edge cases). Reproduced the current VPS behaviour via python-socketio: WITH clientTickT -> {error:'server error'}; WITHOUT clientTickT -> success with a real order id. This confirms the deployed market.py on the VPS still lacks price_at and the repo fix must be shipped. Frontend regression against the live VPS: /demo-trade loads, payout chip 90% (non-zero), UP button click yields graceful failure — 'server error' toast, placing state clears, optimistic trade rolled back (0 open trades), balance $500 unchanged, no console/page errors. /challenges renders correctly. Chart from prior iterations intact.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "sio:trade/place (VPS)", "issue": "Emitting trade/place with clientTickT returns {error:'server error'} because the VPS's deployed market.py is older than the repo (no price_at). Repo fix (resolve_entry_price with getattr+try/except fallback) is correct but NOT YET DEPLOYED on the VPS.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_entry_price_legacy_engine.py",
+    "/app/tests/vps_trade_place_repro_iter60.py",
+    "/app/test_reports/it60_after_place.png",
+    "/app/test_reports/it60_challenges.png"
+  ],
+  "action_items": [
+    "User must redeploy the repo on the VPS so that backend/market.py (with price_at) matches trade_routes.py — after redeploy, re-run tests/vps_trade_place_repro_iter60.py: both acks should succeed."
+  ],
+  "critical_code_review_comments": [
+    "resolve_entry_price is correctly defensive: getattr guard for price_at, try/except around the call, float() cast guarded, and the (now-3s .. now+0.5s) window is preserved. Fallback to engine.price() is safe (present on both old and new engines).",
+    "engine.meta[payload.symbol] and engine.state on line 307/331 are also referenced but both exist on the legacy VPS engine (order_to_dict uses engine.meta too and non-clientTickT trades succeed), so no other unguarded new-engine attribute is used in the placement path.",
+    "DemoTrade.jsx onFail correctly filters the optimistic trade by tempId, refunds the optimistic debit, and setPlacing(false) always runs in the ack callback — verified live: toast fired, balance stayed at $500, 0 open trades after failure.",
+    "ChallengesPage.jsx load() clears bfg_token + bfg_user on 401 before navigate('/login?next=/challenges') — matches the request."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (unit script 7/7; VPS repro documented as expected)", "frontend": "100%"},
+  "test_credentials": "Registered fresh trader on VPS: qa+iter60ui-05822be4@example.com (token stored at /app/test_reports/it60_token.txt). Trade repro used qa+iter60-36fd41fb@example.com.",
+  "seed_data_creation": "Two VPS accounts registered via /api/auth/register for JWTs; no other seed data.",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "The 'server error' on trade/place with clientTickT is a VPS DEPLOYMENT lag (old market.py, no price_at) — the repo fix in /app/backend/routes/trade_routes.py (resolve_entry_price) is verified correct locally. After user deploys, rerun /app/tests/vps_trade_place_repro_iter60.py — both acks should return {trade:{...}}. Frontend rollback UX already works gracefully today.",
+  "rca of the issue": "Root cause: VPS runs a MIXED deployment — updated ws_routes.py and trade_routes.py were pushed but market.py was not, so engine.price_at(...) raises AttributeError inside place_trade_core -> ack {error:'server error'}. Reproduction: python-socketio to https://api.binaryfundglobal.com socketio_path='/api/socket.io/', emit 'trade/place' with clientTickT=time.time() -> error; without clientTickT -> success. Mitigation (already in repo): resolve_entry_price() in /app/backend/routes/trade_routes.py uses getattr(engine, 'price_at', None) + try/except and falls back to engine.price(). Verified with LegacyEngine/NewEngine/BrokenEngine stubs in tests/test_entry_price_legacy_engine.py."
+}
