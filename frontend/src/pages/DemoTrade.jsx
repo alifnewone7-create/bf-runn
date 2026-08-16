@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import { Unpackr } from 'msgpackr';
-import { Plus, X, SignOut, ChartPieSlice, ClockCounterClockwise, Lightning, Question, GearSix, Download, User as UserIcon, CaretDown, ChartLineUp, Flask, Atom, Crown, SketchLogo } from '@phosphor-icons/react';
+import { Plus, X, SignOut, ChartPieSlice, ClockCounterClockwise, Lightning, Question, GearSix, Download, User as UserIcon, CaretDown, ChartLineUp, Flask, Atom, Crown, SketchLogo, Trophy } from '@phosphor-icons/react';
 import { useToast } from '../hooks/use-toast';
 import { AssetIcon } from '../components/trade/AssetIcon';
 import AssetPicker from '../components/trade/AssetPicker';
@@ -23,6 +23,7 @@ const SIDE_ITEMS = [
   [ChartPieSlice, 'Portfolio', '/dashboard'],
   [ClockCounterClockwise, 'History', null],
   [Lightning, 'Signals', null],
+  [Trophy, 'Challenges', '/challenges'],
   [UserIcon, 'Profile', '/profile'],
   [Question, 'Help', null],
   [GearSix, 'Settings', null],
