@@ -43,6 +43,27 @@ const setStyle = (el, prop, v) => {
   el.style[prop] = v;
 };
 const setVis = (el, v) => setStyle(el, 'visibility', v);
+
+// "Nice" price step (1/2/2.5/5 × 10^k) for the floating price grid.
+const niceStep = (range, target) => {
+  const raw = range / Math.max(1, target);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / mag;
+  const m = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+  return m * mag;
+};
+
+// Lazily grows a pool of grid-line / price-label divs inside the given host.
+const ensureGridSlot = (host, i, kind) => {
+  while (host.children.length <= i) {
+    const d = document.createElement('div');
+    d.style.cssText = kind === 'line'
+      ? 'position:absolute;left:0;top:0;height:1px;visibility:hidden;will-change:transform;background:repeating-linear-gradient(to right, rgba(255,255,255,0.22) 0 1px, transparent 1px 3px)'
+      : 'position:absolute;right:6px;top:0;visibility:hidden;will-change:transform;font-size:11px;line-height:1;font-weight:500;color:rgba(255,255,255,0.55);font-variant-numeric:tabular-nums;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.6)';
+    host.appendChild(d);
+  }
+  return host.children[i];
+};
 // Cached element size — offsetWidth/Height reads are layout-forcing, so they are
 // re-measured at most every 400ms instead of every frame.
 const sizeCache = new WeakMap();
@@ -302,7 +323,10 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       autoSize: true,
       layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.55)', fontSize: 11, attributionLogo: false },
       localization: { locale: 'en-US' },
-      grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+      // Fine sparse-dotted grid (Quotex-style). Horizontal lines are drawn as DOM
+      // overlays below so they always align pixel-perfectly with the floating
+      // price labels (the native right axis is hidden).
+      grid: { vertLines: { color: 'rgba(255,255,255,0.22)', style: 1 }, horzLines: { visible: false } },
       timeScale: { timeVisible: true, secondsVisible: true, borderColor: 'rgba(255,255,255,0.08)', rightOffset: BASE_RIGHT_OFFSET, barSpacing: (wrapRef.current?.clientWidth || 900) < 700 ? 12 : 22, minBarSpacing: 3, maxBarSpacing: 58,
         // The library shifts the whole visible range by one bar every time a new
         // bar is appended (that is what made the chart slide back on each candle
@@ -313,7 +337,9 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       // autoScale stays ON so the price range is always fitted to the candles —
       // that keeps the chart vertically locked (no up/down drift). Vertical
       // "zoom" is done purely through scaleMargins (see the axis drag below).
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)', autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 } },
+      // Hidden — prices float over the chart as DOM labels (no separate axis
+      // column), Quotex-style. The scale itself still drives the price mapping.
+      rightPriceScale: { visible: false, autoScale: true, scaleMargins: { top: 0.1, bottom: 0.1 } },
       // Smooth momentum on touch flick + pinch zoom on mobile, and mouse-wheel/
       // press-drag on desktop. Clamp code below re-enforces the 50% rule every
       // frame so kinetic overshoot cannot escape it.
@@ -709,6 +735,8 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
   const targetRef = useRef(null); // latest tick target the candle glides toward
   const lastFrameRef = useRef(0);
   const livePriceLineRef = useRef(null);
+  const priceGridLinesRef = useRef(null);
+  const priceGridLabelsRef = useRef(null);
   const liveVertTopRef = useRef(null);
   const liveVertBotRef = useRef(null);
   const livePriceTagRef = useRef(null);
@@ -890,6 +918,46 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
           setVis(tag, 'hidden');
           setVis(liveCountdownRef.current, 'hidden');
         }
+      }
+
+      // Floating price grid — horizontal dotted lines + right-edge price labels
+      // overlaid on the chart (native right axis is hidden). Recomputed every
+      // frame from the live price mapping so lines and labels always align.
+      const linesHost = priceGridLinesRef.current;
+      const labelsHost = priceGridLabelsRef.current;
+      if (s && ts && linesHost && labelsHost) {
+        let idx = 0;
+        if (readyRef.current && dataRef.current.length) {
+          let paneH = 0;
+          try { paneH = chartRef.current?.paneSize()?.height || 0; } catch (e) { /* noop */ }
+          if (!paneH) paneH = Math.max(0, (hostSizeRef.current.h || 0) - 29);
+          const pTop = s.coordinateToPrice(0);
+          const pBot = s.coordinateToPrice(paneH);
+          if (pTop !== null && pTop !== undefined && pBot !== null && pBot !== undefined && pTop > pBot) {
+            const step = niceStep(pTop - pBot, Math.max(4, Math.round(paneH / 60)));
+            const dec = digitsRef.current;
+            const paneW = Math.round(ts.width() || 0);
+            const kFrom = Math.ceil(pBot / step);
+            const kTo = Math.floor(pTop / step);
+            for (let k = kFrom; k <= kTo && idx < 24; k += 1) {
+              const price = k * step;
+              const y = s.priceToCoordinate(price);
+              if (y === null || y === undefined || y < 8 || y > paneH - 8) continue;
+              const gl = ensureGridSlot(linesHost, idx, 'line');
+              const lb = ensureGridSlot(labelsHost, idx, 'label');
+              setVis(gl, 'visible');
+              setXform(gl, `translate3d(0,${Math.round(y) - 0.5}px,0)`);
+              setStyle(gl, 'width', `${paneW}px`);
+              setVis(lb, 'visible');
+              setXform(lb, `translate3d(0,${y}px,0) translateY(-50%)`);
+              const txt = price.toFixed(dec);
+              if (lb.textContent !== txt) lb.textContent = txt;
+              idx += 1;
+            }
+          }
+        }
+        for (let i2 = idx; i2 < linesHost.children.length; i2 += 1) setVis(linesHost.children[i2], 'hidden');
+        for (let i2 = idx; i2 < labelsHost.children.length; i2 += 1) setVis(labelsHost.children[i2], 'hidden');
       }
 
       // Continuous live scroll — slide the view by the fraction of the bar that
@@ -1158,6 +1226,11 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
   return (
     <div className="relative h-full w-full overflow-hidden">
       <div ref={wrapRef} className="absolute inset-0 z-[2]" data-testid="trade-chart" />
+
+      {/* Floating price grid — dotted horizontal lines behind the candles and
+          price labels above them (replaces the separate right price axis). */}
+      <div ref={priceGridLinesRef} className="absolute inset-0 z-[1] pointer-events-none overflow-hidden" data-testid="price-grid-lines" />
+      <div ref={priceGridLabelsRef} className="absolute inset-0 z-[6] pointer-events-none overflow-hidden" data-testid="price-grid-labels" />
 
       {/* Jump back to the live edge — only while browsing history. */}
       {browsingHistory && (

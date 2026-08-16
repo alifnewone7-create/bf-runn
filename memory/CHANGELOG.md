@@ -117,3 +117,8 @@ User video (EUR/AUD 5s, real BASIC account) showed 12px (1-bar) left shift per c
 Re-verified current preview code pixel-level: 5s tf, candle dragged to mid-screen (clamp limit), 14 frames across 3 candle closes -> history 0px shift, live edge marches right. Fix (shiftVisibleRangeOnNewBar:false + no RAF autoscroll in TradeChart.jsx) confirmed working.
 User confirmed: "akhon shob thik ache no more changes need". Video was from stale/production build.
 Throwaway VPS QA account: qa.chart.1786864600761104835@mailinator.com / QaTest#12345 (VPS tokens expire 15 min; register fresh per run).
+
+### Chart visual restyle — floating price scale + dotted grid (2026-06)
+Per user reference image (Quotex-like): (1) native right price axis hidden (rightPriceScale.visible:false) — prices now float over the chart as DOM labels at the right edge (pool of divs in data-testid=price-grid-labels, z-6), chart/time-axis now full-bleed; (2) grid restyled: library vertLines dotted rgba(255,255,255,0.22) style 1, horzLines drawn as DOM dotted rows (data-testid=price-grid-lines, z-1 behind candles) pixel-aligned with the labels (computed every RAF frame via coordinateToPrice/priceToCoordinate + niceStep 1/2/2.5/5).
+Note: price-axis drag-to-compress zone is dormant (axis width 0) — feature intentionally untouched otherwise.
+Verified via screenshots: default view, zoom-out, pan-left — lines/labels track correctly, no compile errors.
