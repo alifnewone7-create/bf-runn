@@ -303,7 +303,13 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.55)', fontSize: 11, attributionLogo: false },
       localization: { locale: 'en-US' },
       grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
-      timeScale: { timeVisible: true, secondsVisible: true, borderColor: 'rgba(255,255,255,0.08)', rightOffset: BASE_RIGHT_OFFSET, barSpacing: (wrapRef.current?.clientWidth || 900) < 700 ? 12 : 22, minBarSpacing: 3, maxBarSpacing: 58 },
+      timeScale: { timeVisible: true, secondsVisible: true, borderColor: 'rgba(255,255,255,0.08)', rightOffset: BASE_RIGHT_OFFSET, barSpacing: (wrapRef.current?.clientWidth || 900) < 700 ? 12 : 22, minBarSpacing: 3, maxBarSpacing: 58,
+        // The library shifts the whole visible range by one bar every time a new
+        // bar is appended (that is what made the chart slide back on each candle
+        // close). Turned off: the view stays exactly where it is and the new candle
+        // simply occupies the space that is already there.
+        shiftVisibleRangeOnNewBar: false,
+        allowShiftVisibleRangeOnWhitespaceReplacement: false },
       // autoScale stays ON so the price range is always fitted to the candles —
       // that keeps the chart vertically locked (no up/down drift). Vertical
       // "zoom" is done purely through scaleMargins (see the axis drag below).
