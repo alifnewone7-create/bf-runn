@@ -111,3 +111,9 @@
 - Mobile drawer: segmented account tabs at top (active tab highlighted with icon color), hero balance below
 - Active account removed from rows list on mobile; no ACTIVE chip on mobile (desktop keeps it)
 - Unlocked non-active rows show ⇄ switch icon button on mobile; rows now say "X Account"
+
+### Chart candle-close backward-shift — final verification (2026-06, fork session)
+User video (EUR/AUD 5s, real BASIC account) showed 12px (1-bar) left shift per candle close = pre-fix behavior.
+Re-verified current preview code pixel-level: 5s tf, candle dragged to mid-screen (clamp limit), 14 frames across 3 candle closes -> history 0px shift, live edge marches right. Fix (shiftVisibleRangeOnNewBar:false + no RAF autoscroll in TradeChart.jsx) confirmed working.
+User confirmed: "akhon shob thik ache no more changes need". Video was from stale/production build.
+Throwaway VPS QA account: qa.chart.1786864600761104835@mailinator.com / QaTest#12345 (VPS tokens expire 15 min; register fresh per run).
