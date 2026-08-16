@@ -58,7 +58,7 @@ const ensureGridSlot = (host, i, kind) => {
   while (host.children.length <= i) {
     const d = document.createElement('div');
     d.style.cssText = kind === 'line'
-      ? 'position:absolute;left:0;top:0;height:1px;visibility:hidden;will-change:transform;background:repeating-linear-gradient(to right, rgba(255,255,255,0.22) 0 1px, transparent 1px 3px)'
+      ? 'position:absolute;left:0;top:0;height:1px;visibility:hidden;will-change:transform;background:rgba(255,255,255,0.09)'
       : 'position:absolute;right:6px;top:0;visibility:hidden;will-change:transform;font-size:11px;line-height:1;font-weight:500;color:rgba(255,255,255,0.55);font-variant-numeric:tabular-nums;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,0.6)';
     host.appendChild(d);
   }
@@ -79,6 +79,9 @@ const measure = (el, fallbackW = 0, fallbackH = 0) => {
 
 // Empty bars kept to the right of the live candle (the live edge "parks" here).
 const BASE_RIGHT_OFFSET = 8;
+// Future whitespace slots appended after the newest candle so the grid and the
+// time labels continue across the right-hand side of the chart (Quotex-style).
+const FUTURE_WS_BARS = 300;
 
 function addSeriesOfType(chart, type) {
   const common = { lastValueVisible: false, priceLineVisible: false };
@@ -326,7 +329,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
       // Fine sparse-dotted grid (Quotex-style). Horizontal lines are drawn as DOM
       // overlays below so they always align pixel-perfectly with the floating
       // price labels (the native right axis is hidden).
-      grid: { vertLines: { color: 'rgba(255,255,255,0.22)', style: 1 }, horzLines: { visible: false } },
+      grid: { vertLines: { color: 'rgba(255,255,255,0.09)' }, horzLines: { visible: false } },
       timeScale: { timeVisible: true, secondsVisible: true, borderColor: 'rgba(255,255,255,0.08)', rightOffset: BASE_RIGHT_OFFSET, barSpacing: (wrapRef.current?.clientWidth || 900) < 700 ? 12 : 22, minBarSpacing: 3, maxBarSpacing: 58,
         // The library shifts the whole visible range by one bar every time a new
         // bar is appended (that is what made the chart slide back on each candle
@@ -609,6 +612,31 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
   }, []);
 
 
+  // ── Future whitespace tail ────────────────────────────────────────────────
+  const wsEndRef = useRef(0);
+  const withWhitespace = (rows, tfNow) => {
+    if (!rows.length || !tfNow) { wsEndRef.current = 0; return rows; }
+    const last = rows[rows.length - 1].time;
+    const out = rows.slice();
+    for (let k = 1; k <= FUTURE_WS_BARS; k += 1) out.push({ time: last + k * tfNow });
+    wsEndRef.current = last + FUTURE_WS_BARS * tfNow;
+    return out;
+  };
+  // The whitespace tail shifts the library's "real time" edge, so the live view
+  // is positioned manually: newest CANDLE parked BASE_RIGHT_OFFSET bars from the
+  // right edge (what scrollToRealTime used to do before the tail existed).
+  const snapToLive = () => {
+    const ts = chartRef.current?.timeScale();
+    const N = dataRef.current.length;
+    if (!ts || !N) return;
+    const range = ts.getVisibleLogicalRange();
+    const bs = ts.options()?.barSpacing || 22;
+    const paneW = ts.width() || hostSizeRef.current.w || 900;
+    const visible = range && range.to - range.from > 0 ? range.to - range.from : paneW / bs;
+    const to = (N - 1) + BASE_RIGHT_OFFSET;
+    try { ts.setVisibleLogicalRange({ from: to - visible, to }); } catch (e) { /* noop */ }
+  };
+
   // Series lifecycle — swapped when chart type changes.
   useEffect(() => {
     const chart = chartRef.current;
@@ -616,7 +644,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
     if (seriesRef.current) { try { chart.removeSeries(seriesRef.current); } catch (e) { /* noop */ } }
     const series = addSeriesOfType(chart, chartType);
     series.applyOptions({ priceFormat: { type: 'price', precision: digitsRef.current, minMove: 1 / 10 ** digitsRef.current } });
-    series.setData(toSeriesData(dataRef.current, chartType));
+    series.setData(withWhitespace(toSeriesData(dataRef.current, chartType), tfRef.current));
     seriesRef.current = series;
   }, [chartType]);
 
@@ -678,14 +706,16 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
     if (cached) {
       dataRef.current = cached.data;
       volRef.current = robustStep(cached.data.map((c) => (c.open + c.close) / 2));
-      seriesRef.current.setData(toSeriesData(cached.data, typeRef.current));
+      seriesRef.current.setData(withWhitespace(toSeriesData(cached.data, typeRef.current), tf));
       lastCandleRef.current = cached.data[cached.data.length - 1] || null;
+      snapToLive();
       readyRef.current = true;
       setLoading(false);
     } else {
       // No cache → clear chart and show skeleton until data arrives.
       dataRef.current = [];
       seriesRef.current.setData([]);
+      wsEndRef.current = 0;
       lastCandleRef.current = null;
       setLoading(true);
     }
@@ -707,9 +737,9 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
           volRef.current = robustStep(candles.map((c) => (c.open + c.close) / 2));
           _candlesCache.set(cacheKey, { data: candles, ts: Date.now() });
           dataRef.current = candles;
-          seriesRef.current.setData(toSeriesData(candles, typeRef.current));
+          seriesRef.current.setData(withWhitespace(toSeriesData(candles, typeRef.current), tf));
           lastCandleRef.current = candles[candles.length - 1] || null;
-          chartRef.current?.timeScale().scrollToRealTime();
+          snapToLive();
           followRef.current = true;
           readyRef.current = true;
           setLoading(false);
@@ -754,9 +784,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
   const browsingRef = useRef(false);
   const [browsingHistory, setBrowsingHistory] = useState(false);
   const jumpToLive = () => {
-    const ts = chartRef.current?.timeScale();
-    if (!ts) return;
-    try { ts.scrollToRealTime(); } catch (e) { /* noop */ }
+    snapToLive();
     followRef.current = true;
   };
   const serverNow = () => {
@@ -840,6 +868,15 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
           lc = { time: tgt.bucket, open, high: open, low: open, close: open };
           lastCandleRef.current = lc;
           dataRef.current.push(lc);
+          // Keep the future-whitespace tail a constant length (one new empty
+          // slot per new candle) so the grid never runs out on the right.
+          let guard = 0;
+          while (wsEndRef.current && wsEndRef.current < lc.time + FUTURE_WS_BARS * tfNow && guard < 3) {
+            const nt = wsEndRef.current + tfNow;
+            try { s.update({ time: nt }); } catch (e) { break; }
+            wsEndRef.current = nt;
+            guard += 1;
+          }
         }
         if (lc.time === tgt.bucket) {
           const diff = tgt.price - lc.close;
@@ -850,7 +887,9 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
             lc.close = next;
             lc.high = Math.max(lc.high, next);
             lc.low = Math.min(lc.low, next);
-            s.update(type === 'line' || type === 'area' ? { time: lc.time, value: lc.close } : { ...lc });
+            // historicalUpdate=true — the running candle sits BEFORE the future
+            // whitespace tail, so it is never the series' last point anymore.
+            s.update(type === 'line' || type === 'area' ? { time: lc.time, value: lc.close } : { ...lc }, true);
           }
         }
       }
@@ -1021,7 +1060,7 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
         dataRef.current = merged;
         const ts = chartRef.current?.timeScale();
         const range = ts?.getVisibleLogicalRange();
-        seriesRef.current.setData(toSeriesData(merged, typeRef.current));
+        seriesRef.current.setData(withWhitespace(toSeriesData(merged, typeRef.current), tfNow));
         if (ts && range) ts.setVisibleLogicalRange({ from: range.from + older.length, to: range.to + older.length });
         _candlesCache.set(`${sym}|${tfNow}`, { data: merged, ts: Date.now(), hasMore: hasMoreRef.current });
       }

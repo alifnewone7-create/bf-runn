@@ -1,0 +1,34 @@
+{
+  "summary": "Iter61 — Frontend-only verification of the two chart visual changes (floating right-edge price labels; solid grid lines + future whitespace tail extending across empty area) against the LIVE VPS backend. Registered a fresh throwaway trader via VPS /api/auth/register, stored bfg_token in preview localStorage, opened /demo-trade. Verified: (1) NO regression on candle-close stability — with ZERO interaction, on 5s TF, monitored 33s (6+ candle closes) sampling every 3s: price-grid-labels children stayed at 9, price-grid-lines children stayed at 9-11 (dynamic band re-draw), canvas rect stable at x=64 w=1556 h=720 across all 11 samples, and time-axis labels advance smoothly as expected without any discrete jump at candle-close boundaries. (2) Floating price labels: price-grid-labels contains 9 visible children (e.g. 1.08300, 1.08400, 1.08500) floating at the right edge (right≈1614) OVER the chart area — no separate axis column; canvas extends the full 1556px including a large empty future region to the right of the live candle, and time labels continue into that future zone (e.g. 14:30 shown while now=14:27). (3) Grid lines are SOLID: borderTopStyle='solid', background=rgba(255,255,255,0.09), height=1px, backgroundImage='none' — dotted/hyphen style is gone. (4) Pan/zoom: dragging right made the jump-to-live-button appear; clicking it hid the button and returned newest candle ~near right edge (not lost in whitespace). (5) Timeframe switch (1m→5s→1m via dropdown) and pair switch (EUR/USD→GBP/USD (OTC), payout 88%) re-render correctly with no CRA error overlay and no 'Cannot update oldest data' console error. (6) candle-countdown ticks (00:09→00:02), live-price-tag updates (1.08398), live dashed price line visible. All 7 checkpoints PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/it61_initial.png",
+    "/app/test_reports/it61_5s_t0.png",
+    "/app/test_reports/it61_5s_t5.png",
+    "/app/test_reports/it61_5s_t10.png",
+    "/app/test_reports/it61_after_pan.png",
+    "/app/test_reports/it61_after_jump.png",
+    "/app/test_reports/it61_1m.png",
+    "/app/test_reports/it61_gbp.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TradeChart.jsx price-grid computed style is now correctly SOLID (background rgba(255,255,255,0.09), height 1px) — matches the vertLines color used by lightweight-charts internally so DOM overlay and canvas grid stay visually consistent.",
+    "FUTURE_WS_BARS=300 whitespace tail keeps the right-side timeline populated so the live edge never becomes 'the end' — this is what prevents leftward re-flow at candle close. Confirmed no discrete jump across 6+ candle closes on 5s TF.",
+    "snapToLive() correctly parks the newest bar ~8 bars from the right edge (not in whitespace) — verified via jump-to-live button click after a right-pan.",
+    "No 'Cannot update oldest data' runtime error observed — historicalUpdate=true in the drain RAF loop is holding."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "100% (7/7 checkpoints)"},
+  "test_credentials": "Fresh VPS trader: qa.1786890361@mailinator.com / QaTest#12345 (token 15-min TTL, already used).",
+  "seed_data_creation": "One throwaway VPS account via /api/auth/register.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Chart visual changes (floating price labels + solid full-width grid + 300-bar future whitespace) are verified stable against VPS. Registration UI still blocked by country dropdown — use API register + localStorage.setItem('bfg_token', ...) flow. Any future chart change should re-run the 30s zero-interaction candle-close sample on 5s TF; positions_over_time here showed stable label/line counts and canvas rect across 11 samples.",
+  "rca of the issue": "N/A — no bugs found this iteration."
+}
