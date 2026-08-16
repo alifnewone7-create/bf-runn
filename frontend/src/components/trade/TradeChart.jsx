@@ -902,31 +902,17 @@ export default function TradeChart({ symbol, digits, lastTick, openTrades, hover
         // right of the viewport (i.e. the user is browsing history).
         const range = ts.getVisibleLogicalRange();
         const off = range ? range.to - (dataRef.current.length - 1) : 0;
-        const browsing = !followRef.current && off < 0;
+        const browsing = off < 0.15;
         if (browsing !== browsingRef.current) {
           browsingRef.current = browsing;
           setBrowsingHistory(browsing);
         }
       }
-      // Live edge — the view NEVER auto-shifts to keep a gap in front of the
-      // running candle. When a candle closes and the next one opens it simply eats
-      // into whatever space is already on the right, so the chart stays visually
-      // still. The only exception: if the newest candle is about to be pushed off
-      // the right edge we nudge by the minimum needed to keep it in view.
-      if (ts && readyRef.current && lc && followRef.current && dataRef.current.length) {
-        const range = ts.getVisibleLogicalRange();
-        if (range) {
-          const maxBars = maxRightBarsRef.current?.() ?? Infinity;
-          // Never aim past the pan clamp, otherwise the follow and the clamp push
-          // in opposite directions every frame and the chart twitches.
-          const limit = Math.max(0, maxBars - 0.2);
-          const minGap = Math.min(0.6, limit);
-          const cur = range.to - (dataRef.current.length - 1);
-          if (minGap - cur > 0.02) {
-            try { ts.scrollToPosition(minGap, false); } catch (e) { /* noop */ }
-          }
-        }
-      }
+      // NO automatic scrolling of any kind. When a candle closes the view is left
+      // exactly where it is — the chart never pushes the existing candles back to
+      // open space in front of the running candle. Once the newest candle reaches
+      // the right edge it simply keeps going off-screen and the jump-to-live arrow
+      // appears, so returning to the live edge stays a deliberate user action.
       raf = requestAnimationFrame(drain);
     };
     raf = requestAnimationFrame(drain);
