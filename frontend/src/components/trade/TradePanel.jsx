@@ -9,21 +9,11 @@ import { TIMER_STEPS, fmtDur, resolveTimeTarget, buildTimeChips } from './durati
 export { TIMER_STEPS, fmtDur, resolveTimeTarget };
 
 
-const Stepper = ({ label, onMinus, onPlus, children, testId }) => (
-  <div className="rounded-xl border border-white/[0.08] bg-black/30 px-1.5 py-1.5 flex items-center gap-1" data-testid={testId}>
-    <button onClick={onMinus} data-testid={`${testId}-minus`}
-            className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-white/[0.04] text-white/50 hover:text-white hover:bg-white/[0.09] transition-colors">
-      <Minus size={14} weight="bold" />
-    </button>
-    <div className="flex-1 text-center min-w-0">
-      <div className="text-[9.5px] uppercase tracking-[0.14em] text-white/40 font-semibold">{label}</div>
-      {children}
-    </div>
-    <button onClick={onPlus} data-testid={`${testId}-plus`}
-            className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-white/[0.04] text-white/50 hover:text-white hover:bg-white/[0.09] transition-colors">
-      <Plus size={14} weight="bold" />
-    </button>
-  </div>
+const StepBtn = ({ onClick, testId, children }) => (
+  <button onClick={onClick} data-testid={testId}
+          className="h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-white/[0.04] text-white/50 hover:text-white hover:bg-white/[0.09] transition-colors">
+    {children}
+  </button>
 );
 
 /**
@@ -131,6 +121,23 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
 
   const stepAmt = (dir) => setAmount(Math.max(1, (Number(amount) || 1) + dir));
 
+  const [amtMode, setAmtMode] = useState('usd');
+  const [pct, setPct] = useState(1);
+  const applyPct = (p) => {
+    const clamped = Math.min(100, Math.max(1, Math.round(p)));
+    setPct(clamped);
+    setAmount(Math.max(1, Math.round((Number(balance) || 0) * clamped) / 100));
+  };
+  const toggleAmtMode = () => {
+    if (amtMode === 'usd') {
+      const b = Number(balance) || 0;
+      applyPct(b > 0 ? ((Number(amount) || 1) / b) * 100 : 1);
+      setAmtMode('pct');
+    } else {
+      setAmtMode('usd');
+    }
+  };
+
   const higherBtn = (
     <button onClick={() => onTrade('higher')} data-testid="trade-higher-button"
             onMouseEnter={() => onHoverDir?.('higher')} onMouseLeave={() => onHoverDir?.(null)}
@@ -196,14 +203,36 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
   }
 
   const amountBox = (
-    <Stepper label="Investment" onMinus={() => stepAmt(-1)} onPlus={() => stepAmt(1)} testId="trade-amount">
-      <div className="flex items-center justify-center text-white font-bold leading-tight">
-        <span className="text-[13px] text-[#14b877]/80 mr-0.5">$</span>
-        <input type="number" min="1" value={amount} data-testid="trade-amount-input"
-               onChange={(e) => setAmount(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
-               className="w-14 bg-transparent text-center text-[16px] font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+    <div className="rounded-xl border border-white/[0.08] bg-black/30 px-1.5 pt-1.5 pb-0.5" data-testid="trade-amount">
+      <div className="flex items-center gap-1">
+        <StepBtn onClick={() => (amtMode === 'pct' ? applyPct(pct - 1) : stepAmt(-1))} testId="trade-amount-minus">
+          <Minus size={14} weight="bold" />
+        </StepBtn>
+        <div className="flex-1 text-center min-w-0">
+          <div className="text-[9.5px] uppercase tracking-[0.14em] text-white/40 font-semibold">Investment</div>
+          <div className="flex items-center justify-center text-white font-bold leading-tight">
+            {amtMode === 'usd' && <span className="text-[13px] text-[#14b877]/80 mr-0.5">$</span>}
+            {amtMode === 'usd' ? (
+              <input type="number" min="1" value={amount} data-testid="trade-amount-input"
+                     onChange={(e) => setAmount(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                     className="w-14 bg-transparent text-center text-[16px] font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+            ) : (
+              <input type="number" min="1" max="100" value={pct} data-testid="trade-amount-pct-input"
+                     onChange={(e) => e.target.value !== '' && applyPct(Number(e.target.value))}
+                     className="w-12 bg-transparent text-center text-[16px] font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+            )}
+            {amtMode === 'pct' && <span className="text-[13px] text-[#14b877]/80 ml-0.5">%</span>}
+          </div>
+        </div>
+        <StepBtn onClick={() => (amtMode === 'pct' ? applyPct(pct + 1) : stepAmt(1))} testId="trade-amount-plus">
+          <Plus size={14} weight="bold" />
+        </StepBtn>
       </div>
-    </Stepper>
+      <button onClick={toggleAmtMode} data-testid="trade-amount-switch"
+              className="w-full mt-0.5 py-1 text-[10px] font-bold tracking-[0.22em] uppercase text-white/35 hover:text-white/75 transition-colors">
+        Switch
+      </button>
+    </div>
   );
 
   return (
