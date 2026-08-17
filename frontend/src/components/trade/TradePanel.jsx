@@ -229,7 +229,7 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
         </StepBtn>
       </div>
       <button onClick={toggleAmtMode} data-testid="trade-amount-switch"
-              className="w-full mt-1.5 py-1.5 border-t border-white/[0.08] text-[10px] font-bold tracking-[0.22em] uppercase text-white/60 hover:text-[#14b877] transition-colors">
+              className="w-full mt-1.5 py-1.5 border-t border-white/[0.08] text-[10px] font-bold tracking-[0.22em] uppercase text-white/60 hover:text-white/90 transition-colors">
         Switch
       </button>
     </div>
