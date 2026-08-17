@@ -544,8 +544,8 @@ export default function DemoTrade() {
             data-testid="demo-balance"
             className={`group rounded-xl border ${badge.ring} bg-gradient-to-b from-white/[0.06] to-white/[0.015] pl-1 pr-1.5 sm:pl-1.5 sm:pr-2 py-[3px] sm:py-1 flex items-center gap-1.5 sm:gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] active:scale-[0.97] transition-[transform,border-color] duration-150`}
           >
-            <span className={`grid place-items-center h-[22px] w-[22px] sm:h-7 sm:w-7 rounded-lg sm:rounded-[10px] ${badge.wrap}`} data-testid={`account-icon-${accountKey}`}>
-              <badge.icon className="h-[13px] w-[13px] sm:h-4 sm:w-4" weight="fill" />
+            <span className={`grid place-items-center ${badge.text}`} data-testid={`account-icon-${accountKey}`}>
+              <badge.icon className="h-[16px] w-[16px] sm:h-5 sm:w-5" weight="fill" />
             </span>
             <span className="flex flex-col items-start leading-none gap-[2px] sm:gap-[3px]">
               <span className={`text-[7px] sm:text-[8px] font-extrabold tracking-[0.16em] ${badge.text}`} data-testid="account-badge">
