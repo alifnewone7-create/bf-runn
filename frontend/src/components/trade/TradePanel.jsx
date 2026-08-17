@@ -8,7 +8,6 @@ import { TIMER_STEPS, fmtDur, resolveTimeTarget, buildTimeChips } from './durati
 
 export { TIMER_STEPS, fmtDur, resolveTimeTarget };
 
-const QUICK_AMOUNTS = [5, 10, 50, 100];
 
 const Stepper = ({ label, onMinus, onPlus, children, testId }) => (
   <div className="rounded-xl border border-white/[0.08] bg-black/30 px-1.5 py-1.5 flex items-center gap-1" data-testid={testId}>
@@ -223,16 +222,6 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
       )}
 
       {amountBox}
-
-      {/* Quick amount chips */}
-      <div className="grid grid-cols-4 gap-1.5 -mt-1">
-        {QUICK_AMOUNTS.map((v) => (
-          <button key={v} onClick={() => setAmount(v)} data-testid={`quick-amount-${v}`}
-                  className={`py-1.5 rounded-lg text-[11.5px] font-bold tabular-nums transition-colors ${Number(amount) === v ? 'bg-[#14b877]/15 text-[#14b877] border border-[#14b877]/30' : 'bg-white/[0.04] text-white/50 border border-transparent hover:text-white hover:bg-white/[0.08]'}`}>
-            ${v}
-          </button>
-        ))}
-      </div>
 
       <DurationPicker mode={mode} setMode={setModeSafe} duration={duration} setDuration={setDuration} />
 
