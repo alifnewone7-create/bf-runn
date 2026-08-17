@@ -588,7 +588,7 @@ export default function DemoTrade() {
         </aside>
 
         {/* Chart area */}
-        <main className="flex-1 relative min-w-0" style={{ background: 'radial-gradient(1100px 520px at 50% 0%, rgba(20,184,119,0.09), transparent 60%), radial-gradient(700px 400px at 100% 100%, rgba(20,184,119,0.04), transparent 55%), linear-gradient(180deg, #04100b 0%, #030d09 100%)' }}>
+        <main className="flex-1 relative min-w-0 bfg-trade-main-bg">
           {activeIns && <TradeChart symbol={active} digits={activeIns.digits} lastTick={lastTick} openTrades={openTrades} hoverDir={hoverDir} results={results} onDismissResult={dismissResult} resultTtl={RESULT_TTL} wsRef={wsRef} />}
           <TradesPanel openTrades={openTrades} history={history} instMap={instMap} />
         </main>

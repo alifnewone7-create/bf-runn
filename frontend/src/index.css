@@ -249,6 +249,20 @@ h1, h2, h3, h4, h5, .font-display {
   100% { background-position: -200% 0; opacity: 0.85; }
 }
 
+/* Trade chart area background — mobile: flat, identical to the header/page
+   colour (Quotex-style uniform top); desktop keeps the green radial glow. */
+.bfg-trade-main-bg {
+  background: #040D09;
+}
+@media (min-width: 768px) {
+  .bfg-trade-main-bg {
+    background:
+      radial-gradient(1100px 520px at 50% 0%, rgba(20,184,119,0.09), transparent 60%),
+      radial-gradient(700px 400px at 100% 100%, rgba(20,184,119,0.04), transparent 55%),
+      linear-gradient(180deg, #04100b 0%, #030d09 100%);
+  }
+}
+
 /* Chart area — flat dark rectangle with a subtle repeating diagonal stripe
    pattern that stays static (no pulse) to match the Quotex reference. */
 .bfg-chart-skel {
