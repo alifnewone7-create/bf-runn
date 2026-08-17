@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Minus, ArrowUp, ArrowDown, Clock, Timer, CaretDown, ArrowsLeftRight } from '@phosphor-icons/react';
+import { Plus, Minus, ArrowUp, ArrowDown, Clock, Timer, CaretDown } from '@phosphor-icons/react';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { AssetIcon } from './AssetIcon';
 import AmountSheet from './AmountSheet';
@@ -228,13 +228,10 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
           <Plus size={14} weight="bold" />
         </StepBtn>
       </div>
-      <div className="mt-1.5 pt-1.5 pb-1 border-t border-white/[0.08]">
-        <button onClick={toggleAmtMode} data-testid="trade-amount-switch"
-                className="w-full py-1.5 rounded-lg bg-white/[0.05] border border-white/[0.07] text-[10px] font-bold tracking-[0.22em] uppercase text-white/55 hover:text-white hover:bg-white/[0.1] hover:border-[#14b877]/30 active:scale-[0.97] transition-[background-color,border-color,color,transform] duration-150 flex items-center justify-center gap-1.5">
-          <ArrowsLeftRight size={12} weight="bold" className="text-[#14b877]" />
-          Switch
-        </button>
-      </div>
+      <button onClick={toggleAmtMode} data-testid="trade-amount-switch"
+              className="w-full mt-1.5 py-1.5 border-t border-white/[0.08] text-[10px] font-bold tracking-[0.22em] uppercase text-white/60 hover:text-[#14b877] transition-colors">
+        Switch
+      </button>
     </div>
   );
 
