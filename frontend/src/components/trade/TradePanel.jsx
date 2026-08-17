@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Plus, Minus, ArrowUp, ArrowDown, Clock, Timer, CaretDown } from '@phosphor-icons/react';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 import { AssetIcon } from './AssetIcon';
@@ -122,6 +122,7 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
   const stepAmt = (dir) => setAmount(Math.max(1, (Number(amount) || 1) + dir));
 
   const [amtMode, setAmtMode] = useState('usd');
+  const amtInputRef = useRef(null);
   const [pct, setPct] = useState(1);
   const applyPct = (p) => {
     const clamped = Math.min(100, Math.max(1, Math.round(p)));
@@ -208,16 +209,16 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
         <StepBtn onClick={() => (amtMode === 'pct' ? applyPct(pct - 1) : stepAmt(-1))} testId="trade-amount-minus">
           <Minus size={14} weight="bold" />
         </StepBtn>
-        <div className="flex-1 text-center min-w-0">
+        <div className="flex-1 text-center min-w-0 cursor-text" onClick={() => amtInputRef.current?.focus()} data-testid="trade-amount-click-area">
           <div className="text-[9.5px] uppercase tracking-[0.14em] text-white/40 font-semibold">Investment</div>
           <div className="flex items-center justify-center text-white font-bold leading-tight">
             {amtMode === 'usd' && <span className="text-[13px] text-[#14b877]/80 mr-0.5">$</span>}
             {amtMode === 'usd' ? (
-              <input type="number" min="1" value={amount} data-testid="trade-amount-input"
+              <input ref={amtInputRef} type="number" min="1" value={amount} data-testid="trade-amount-input"
                      onChange={(e) => setAmount(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
                      className="w-14 bg-transparent text-center text-[16px] font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
             ) : (
-              <input type="number" min="1" max="100" value={pct} data-testid="trade-amount-pct-input"
+              <input ref={amtInputRef} type="number" min="1" max="100" value={pct} data-testid="trade-amount-pct-input"
                      onChange={(e) => e.target.value !== '' && applyPct(Number(e.target.value))}
                      className="w-12 bg-transparent text-center text-[16px] font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
             )}
