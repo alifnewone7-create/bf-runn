@@ -236,16 +236,7 @@ export default function TradePanel({ instrument, amount, setAmount, duration, se
 
       <DurationPicker mode={mode} setMode={setModeSafe} duration={duration} setDuration={setDuration} />
 
-      {/* Profit preview */}
-      <div className="rounded-xl border border-[#14b877]/20 bg-gradient-to-b from-[#14b877]/[0.08] to-transparent text-center py-3.5">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-white/40 font-semibold">Your payout</div>
-        <div className="text-[30px] font-extrabold text-[#14b877] leading-tight tabular-nums" data-testid="trade-profit-pct">+{payoutLabel}</div>
-        <div className="text-[14px] font-semibold text-[#14b877]/85 tabular-nums" data-testid="trade-profit-amount">
-          +${profit.toFixed(2)}
-        </div>
-      </div>
-
-      {/* UP / DOWN — directly under payout card */}
+      {/* UP / DOWN */}
       <div className="flex flex-col gap-3 mt-1">
         {higherBtn}
         {lowerBtn}
