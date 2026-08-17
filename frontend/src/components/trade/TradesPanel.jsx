@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { CaretUp, CaretDown, TrendUp, TrendDown, Pulse, Briefcase, X } from '@phosphor-icons/react';
+import { CaretUp, CaretDown, TrendUp, TrendDown, Pulse, Briefcase, ClockCounterClockwise, X } from '@phosphor-icons/react';
 import { AssetIcon } from './AssetIcon';
 import { fmtDur } from './TradePanel';
 
 export default function TradesPanel({ openTrades, history, instMap }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('open');
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -91,24 +92,30 @@ export default function TradesPanel({ openTrades, history, instMap }) {
         <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end" data-testid="mobile-trades-sheet">
           <div className="flex-1 bg-black/50 backdrop-blur-[3px]" onClick={() => setOpen(false)} />
           <div className="bg-gradient-to-b from-[#071410] to-[#040D09] border-t border-white/[0.09] rounded-t-2xl max-h-[70vh] flex flex-col pb-[env(safe-area-inset-bottom)] tp-fade-up">
-            <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
-              <Briefcase size={17} weight="duotone" className="text-[#14b877]" />
-              <span className="flex-1 text-[15px] font-bold text-white tracking-tight">Trades</span>
-              <span className={`min-w-[20px] h-5 px-1 inline-flex items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${openTrades.length ? 'bg-[#14b877] text-[#03150d]' : 'bg-white/10 text-white/60'}`}>
-                {openTrades.length}
-              </span>
+            <div className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-1.5 border-b border-white/[0.07]">
+              {[
+                { key: 'open', label: 'Open trades', Icon: Briefcase, count: openTrades.length },
+                { key: 'history', label: 'Recent trades', Icon: ClockCounterClockwise, count: history.length },
+              ].map(({ key, label, Icon, count }) => {
+                const active = tab === key;
+                return (
+                  <button key={key} onClick={() => setTab(key)} data-testid={`mobile-trades-tab-${key}`}
+                          className={`flex-1 flex items-center justify-center gap-1.5 h-10 rounded-xl transition-colors ${active ? 'bg-[#14b877]/12 text-white' : 'text-white/45 active:bg-white/[0.05]'}`}>
+                    <Icon size={18} weight="duotone" className={active ? 'text-[#14b877]' : ''} />
+                    {active && <span className="text-[13px] font-bold tracking-tight">{label}</span>}
+                    <span className={`min-w-[19px] h-[19px] px-1 inline-flex items-center justify-center rounded-full text-[10.5px] font-bold tabular-nums ${active && count ? 'bg-[#14b877] text-[#03150d]' : 'bg-white/10 text-white/60'}`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
               <button onClick={() => setOpen(false)} data-testid="mobile-trades-close"
-                      className="h-8 w-8 flex items-center justify-center rounded-lg bg-white/[0.05] text-white/60 active:bg-white/[0.1]">
+                      className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg bg-white/[0.05] text-white/60 active:bg-white/[0.1]">
                 <X size={15} />
               </button>
             </div>
-            <div className="overflow-y-auto px-2 pb-3">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] uppercase tracking-[0.16em] text-white/40 font-semibold">
-                <Pulse size={12} weight="bold" className="text-[#14b877]" /> Open trades
-              </div>
-              {openRows}
-              <div className="px-2 py-1.5 mt-1 text-[10px] uppercase tracking-[0.16em] text-white/40 font-semibold border-t border-white/[0.07] pt-2.5">Recent results</div>
-              {historyRows}
+            <div className="overflow-y-auto px-2 py-2.5">
+              {tab === 'open' ? openRows : historyRows}
             </div>
           </div>
         </div>
