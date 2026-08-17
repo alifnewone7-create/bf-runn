@@ -512,7 +512,7 @@ export default function DemoTrade() {
     <div className="h-[100dvh] flex flex-col text-white bg-[#040D09] overflow-hidden overscroll-none touch-pan-x" data-testid="demo-trade-page"
          style={{ overscrollBehavior: 'none' }}>
       {/* Header */}
-      <header className="shrink-0 flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 h-[52px] border-b border-white/[0.07] bg-[#050f0a]/95 backdrop-blur-xl">
+      <header className="shrink-0 flex items-center gap-2 sm:gap-3 px-2.5 sm:px-4 h-[52px] border-b border-white/[0.05] md:border-white/[0.07] bg-transparent md:bg-[#050f0a]/95 md:backdrop-blur-xl">
         <Link to="/" className="hidden md:flex shrink-0 items-center gap-2" data-testid="trade-logo-link">
           <BrandLogo className="h-7 w-auto object-contain" />
         </Link>
