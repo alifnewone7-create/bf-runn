@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CaretUp, CaretDown, TrendUp, TrendDown, Pulse, Briefcase, ChartLineUp, Receipt, Tray, X } from '@phosphor-icons/react';
+import { CaretUp, CaretDown, TrendUp, TrendDown, Pulse, Briefcase, Receipt, Tray, X } from '@phosphor-icons/react';
 import { AssetIcon } from './AssetIcon';
 import { fmtDur } from './TradePanel';
 
@@ -103,7 +103,7 @@ export default function TradesPanel({ openTrades, history, instMap }) {
           <div className="bg-gradient-to-b from-[#071410] to-[#040D09] border-t border-white/[0.09] rounded-t-2xl max-h-[70vh] flex flex-col pb-[env(safe-area-inset-bottom)] tp-fade-up">
             <div className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-1.5 border-b border-white/[0.07]">
               {[
-                { key: 'open', label: 'Open trades', Icon: ChartLineUp, count: openTrades.length },
+                { key: 'open', label: 'Open trades', Icon: Pulse, count: openTrades.length },
                 { key: 'history', label: 'Recent trades', Icon: Receipt, count: history.length },
               ].map(({ key, label, Icon, count }) => {
                 const active = tab === key;
