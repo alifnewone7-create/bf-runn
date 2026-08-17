@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CaretUp, CaretDown, TrendUp, TrendDown, Pulse, Briefcase, ClockCounterClockwise, X } from '@phosphor-icons/react';
+import { CaretUp, CaretDown, TrendUp, TrendDown, Pulse, Briefcase, Lightning, Receipt, Tray, X } from '@phosphor-icons/react';
 import { AssetIcon } from './AssetIcon';
 import { fmtDur } from './TradePanel';
 
@@ -16,9 +16,18 @@ export default function TradesPanel({ openTrades, history, instMap }) {
 
   const remain = (t) => Math.max(0, Math.round((new Date(t.expiry_time).getTime() - now) / 1000));
 
+  const emptyState = (msg) => (
+    <div className="flex flex-col items-center justify-center py-8 px-6 text-center" data-testid="trades-empty-state">
+      <div className="h-16 w-16 rounded-full bg-white/[0.06] border border-white/[0.07] flex items-center justify-center mb-3.5">
+        <Tray size={28} weight="duotone" className="text-white/50" />
+      </div>
+      <p className="text-[13px] leading-relaxed text-white/45 max-w-[240px]">{msg}</p>
+    </div>
+  );
+
   const openRows = (
     <>
-      {openTrades.length === 0 && <p className="px-2 pb-2 text-[12.5px] text-white/40">No open trades</p>}
+      {openTrades.length === 0 && emptyState('You don\u2019t have any open trades yet. You can open a trade using the form above.')}
       {openTrades.map((t) => (
         <div key={t.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/[0.04] transition-colors" data-testid={`open-trade-${t.id}`}>
           <AssetIcon icon={instMap[t.symbol]?.icon} size={22} />
@@ -38,7 +47,7 @@ export default function TradesPanel({ openTrades, history, instMap }) {
 
   const historyRows = (
     <>
-      {history.length === 0 && <p className="px-2 pb-2 text-[12.5px] text-white/40">No trades yet</p>}
+      {history.length === 0 && emptyState('You don\u2019t have a trade history yet. You can open a trade using the form above.')}
       {history.slice(0, 10).map((t) => (
         <div key={t.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl" data-testid={`closed-trade-${t.id}`}>
           <AssetIcon icon={instMap[t.symbol]?.icon} size={22} />
@@ -94,8 +103,8 @@ export default function TradesPanel({ openTrades, history, instMap }) {
           <div className="bg-gradient-to-b from-[#071410] to-[#040D09] border-t border-white/[0.09] rounded-t-2xl max-h-[70vh] flex flex-col pb-[env(safe-area-inset-bottom)] tp-fade-up">
             <div className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-1.5 border-b border-white/[0.07]">
               {[
-                { key: 'open', label: 'Open trades', Icon: Briefcase, count: openTrades.length },
-                { key: 'history', label: 'Recent trades', Icon: ClockCounterClockwise, count: history.length },
+                { key: 'open', label: 'Open trades', Icon: Lightning, count: openTrades.length },
+                { key: 'history', label: 'Recent trades', Icon: Receipt, count: history.length },
               ].map(({ key, label, Icon, count }) => {
                 const active = tab === key;
                 return (
@@ -114,7 +123,7 @@ export default function TradesPanel({ openTrades, history, instMap }) {
                 <X size={15} />
               </button>
             </div>
-            <div className="overflow-y-auto px-2 py-2.5">
+            <div className="overflow-y-auto px-2 py-2.5 min-h-[240px]">
               {tab === 'open' ? openRows : historyRows}
             </div>
           </div>
