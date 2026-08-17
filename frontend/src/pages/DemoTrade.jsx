@@ -609,11 +609,10 @@ export default function DemoTrade() {
           [UserIcon, 'Profile', '/profile', false],
           [SignOut, 'Logout', 'logout', false],
         ].map(([Icon, label, path, isActive]) => (
-          <button key={label} data-testid={`mobile-nav-${label.toLowerCase()}`}
+          <button key={label} data-testid={`mobile-nav-${label.toLowerCase()}`} aria-label={label}
                   onClick={() => { if (path === 'logout') logout(); else if (path) navigate(path); }}
-                  className={`flex-1 py-2 flex flex-col items-center gap-0.5 transition-colors ${isActive ? 'text-[#14b877]' : 'text-white/40 active:text-white'}`}>
-            <Icon size={19} weight={isActive ? 'fill' : 'duotone'} />
-            <span className="text-[9px] font-semibold">{label}</span>
+                  className={`flex-1 py-2.5 flex items-center justify-center transition-colors ${isActive ? 'text-[#14b877]' : 'text-white/40 active:text-white'}`}>
+            <Icon size={21} weight={isActive ? 'fill' : 'duotone'} />
           </button>
         ))}
       </nav>
